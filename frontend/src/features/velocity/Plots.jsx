@@ -1,11 +1,5 @@
 import { memo, useMemo } from 'react'
-import createPlotlyComponent from 'react-plotly.js/factory'
-import Plotly from 'plotly.js/lib/core'
-import heatmap from 'plotly.js/lib/heatmap'
-import scatter from 'plotly.js/lib/scatter'
-
-Plotly.register([heatmap, scatter])
-const Plot = createPlotlyComponent(Plotly)
+import Plot from 'react-plotly.js'
 const config = { responsive: true, displaylogo: false, scrollZoom: true }
 const base = {
   autosize: true, height: 470, margin: { t: 42, l: 65, r: 35, b: 55 },

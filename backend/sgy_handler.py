@@ -707,97 +707,15 @@ class SGYHandler:
         return self._apply_agc(file_id, window_ms, from_processed=False)
 
     def _apply_agc(self, file_id: str, window_ms: float, from_processed: bool = False, parallel: bool = False, num_workers: int = 4) -> Optional[Dict[str, Any]]:
-        if file_id not in self.files:
-            return None
-
-        f = self.files[file_id]
-        data = f['processed']['data'] if from_processed and 'processed' in f else f['data']
-        sample_rate = f['sample_rate']
-        window_samples = max(1, int(window_ms / sample_rate))
-
-        if window_samples % 2 == 0:
-            window_samples += 1
-
-        half = window_samples // 2
-        num_traces, num_samples = data.shape
-        epsilon = 1e-10
-
-        if parallel and num_workers > 1 and num_traces > 1:
-            nw = min(num_workers, num_traces)
-            chunks = np.array_split(data, nw, axis=0)
-            with concurrent.futures.ProcessPoolExecutor(max_workers=nw) as executor:
-                futures = [executor.submit(_agc_chunk_worker, c, window_samples, half, epsilon) for c in chunks]
-                results = [f.result() for f in futures]
-            result = np.concatenate(results, axis=0).astype(np.float32)
-        else:
-            result = np.zeros_like(data, dtype=np.float32)
-            for t in range(num_traces):
-                self._check_cancel(file_id)
-                trace = data[t]
-                for i in range(num_samples):
-                    start = max(0, i - half)
-                    end = min(num_samples, i + half + 1)
-                    rms = np.sqrt(np.mean(trace[start:end] ** 2))
-                    result[t, i] = trace[i] / (rms + epsilon)
-
-        self.files[file_id]['processed'] = {
-            'data': result,
-            'type': 'agc',
-            'params': {'window_ms': window_ms},
-        }
-
-        return {'status': 'ok', 'type': 'agc', 'params': {'window_ms': window_ms}}
+        from wave_cmp.legacy_filters import apply_agc
+        return apply_agc(self, file_id, window_ms, from_processed, parallel, num_workers)
 
     def apply_bandpass(self, file_id: str, lowcut: float, lowpass: float, highpass: float, highcut: float) -> Optional[Dict[str, Any]]:
         return self._apply_bandpass(file_id, lowcut, lowpass, highpass, highcut, from_processed=False)
 
     def _apply_bandpass(self, file_id: str, lowcut: float, lowpass: float, highpass: float, highcut: float, from_processed: bool = False, parallel: bool = False, num_workers: int = 4) -> Optional[Dict[str, Any]]:
-        if file_id not in self.files:
-            return None
-
-        f = self.files[file_id]
-        data = f['processed']['data'] if from_processed and 'processed' in f else f['data']
-        sample_rate_ms = f['sample_rate']
-        dt_s = sample_rate_ms / 1000.0
-        num_traces, num_samples = data.shape
-
-        freqs = np.fft.rfftfreq(num_samples, d=dt_s)
-        mask = np.zeros_like(freqs, dtype=np.float32)
-
-        for i, fr in enumerate(freqs):
-            if fr < lowcut:
-                mask[i] = 0.0
-            elif fr < lowpass:
-                mask[i] = (fr - lowcut) / (lowpass - lowcut)
-            elif fr < highpass:
-                mask[i] = 1.0
-            elif fr < highcut:
-                mask[i] = (highcut - fr) / (highcut - highpass)
-            else:
-                mask[i] = 0.0
-
-        if parallel and num_workers > 1 and num_traces > 1:
-            nw = min(num_workers, num_traces)
-            chunks = np.array_split(data, nw, axis=0)
-            with concurrent.futures.ProcessPoolExecutor(max_workers=nw) as executor:
-                futures = [executor.submit(_bandpass_chunk_worker, c, mask) for c in chunks]
-                results = [f.result() for f in futures]
-            result = np.concatenate(results, axis=0).astype(np.float32)
-        else:
-            result = np.zeros_like(data, dtype=np.float32)
-            for t in range(num_traces):
-                self._check_cancel(file_id)
-                spectrum = np.fft.rfft(data[t])
-                spectrum *= mask
-                result[t] = np.fft.irfft(spectrum, n=num_samples).real.astype(np.float32)
-
-        self.files[file_id]['processed'] = {
-            'data': result,
-            'type': 'bandpass',
-            'params': {'lowcut': lowcut, 'lowpass': lowpass, 'highpass': highpass, 'highcut': highcut},
-        }
-
-        return {'status': 'ok', 'type': 'bandpass', 'params': {'lowcut': lowcut, 'lowpass': lowpass, 'highpass': highpass, 'highcut': highcut}}
+        from wave_cmp.legacy_filters import apply_bandpass
+        return apply_bandpass(self, file_id, lowcut, lowpass, highpass, highcut, from_processed, parallel, num_workers)
 
     def apply_fxdecon(self, file_id: str, filter_length: int = 5) -> Optional[Dict[str, Any]]:
         return self._apply_fxdecon(file_id, filter_length, from_processed=False)
@@ -1437,95 +1355,8 @@ class SGYHandler:
         return {'path': path, 'traces': int(len(indices)), 'samples': int(n_samples)}
 
     def run_sequence(self, file_id: str, steps: list, parallel: bool = False, num_workers: int = 4) -> Optional[Dict[str, Any]]:
-        if file_id not in self.files:
-            return None
-
-        if file_id in self.files and 'processed' in self.files[file_id]:
-            del self.files[file_id]['processed']
-
-        dsout_results = []
-        for step in steps:
-            self._check_cancel(file_id)
-            t = step['type']
-            try:
-                if t == 'agc':
-                    self._apply_agc(file_id, step['params']['window_ms'], from_processed=True, parallel=parallel, num_workers=num_workers)
-                elif t == 'bandpass':
-                    self._apply_bandpass(file_id, step['params']['lowcut'], step['params']['lowpass'], step['params']['highpass'], step['params']['highcut'], from_processed=True, parallel=parallel, num_workers=num_workers)
-                elif t == 'fxdecon':
-                    self._apply_fxdecon(file_id, step['params']['filter_length'], from_processed=True, parallel=parallel, num_workers=num_workers)
-                elif t == 'fxdecont':
-                    self._apply_fxdecont(file_id, step['params']['pred_order'], step['params']['retro_order'], step['params']['reg'], step['params']['window_size'], step['params']['step'], step['params']['nonlinear_plus'], step['params']['freq_min'], step['params']['freq_max'], from_processed=True, parallel=parallel, num_workers=num_workers)
-                elif t == 'decons':
-                    self._apply_decons(file_id, step['params']['operator_length'], step['params']['prewhitening'], step['params']['phase_mode'], step['params']['bandwidth_min'], step['params']['bandwidth_max'], from_processed=True)
-                elif t == 'psf':
-                    self._apply_psf(file_id, step['params']['phase_deg'], from_processed=True)
-                elif t == 'fk3d':
-                    self._apply_fk3d(file_id,
-                                     wndw_inline=step['params'].get('wndw_inline', 48),
-                                     wndw_xline=step['params'].get('wndw_xline', 48),
-                                     overlap_inline=step['params'].get('overlap_inline', 12),
-                                     overlap_xline=step['params'].get('overlap_xline', 12),
-                                     min_dip_inline=step['params'].get('min_dip_inline', -12.0),
-                                     max_dip_inline=step['params'].get('max_dip_inline', 12.0),
-                                     min_dip_xline=step['params'].get('min_dip_xline', -12.0),
-                                     max_dip_xline=step['params'].get('max_dip_xline', 12.0),
-                                     pct_dip_taper=step['params'].get('pct_dip_taper', 10.0),
-                                     wrap_filt=step['params'].get('wrap_filt', True),
-                                     from_processed=True)
-                elif t == 'gain':
-                    self._apply_gain(file_id,
-                                     voption=step['params'].get('voption', 2.0),
-                                     toption=step['params'].get('toption', 1.0),
-                                     factor=step['params'].get('factor', 1.0),
-                                     units=step['params'].get('units', 'feet'),
-                                     from_processed=True)
-                elif t == 'lfaf':
-                    self._apply_lfaf(file_id,
-                                     dx=step['params'].get('dx', 25.0),
-                                     vel=step['params'].get('vel', 1500.0),
-                                     f1=step['params'].get('f1', 0.0),
-                                     f2=step['params'].get('f2', 20.0),
-                                     ftaper=step['params'].get('ftaper', 5.0),
-                                     maxmix=step['params'].get('maxmix', 0),
-                                     from_processed=True)
-                elif t == 'lfaf1':
-                    self._apply_lfaf1(file_id,
-                                      vel=step['params'].get('vel', 1500.0),
-                                      f1=step['params'].get('f1', 0.0),
-                                      f2=step['params'].get('f2', 20.0),
-                                      ftaper=step['params'].get('ftaper', 5.0),
-                                      maxmix=step['params'].get('maxmix', 15),
-                                       min_offset=step['params'].get('min_offset', 10.0),
-                                       mute_time=step['params'].get('mute_time', 0.0),
-                                       mute_zone_width=step['params'].get('mute_zone_width', 50.0),
-                                       from_processed=True)
-                elif t == 'lfafn':
-                    self._apply_lfafn(file_id,
-                                      dx=step['params'].get('dx', 25.0),
-                                      vel=step['params'].get('vel', 1500.0),
-                                      f1=step['params'].get('f1', 0.0),
-                                      f2=step['params'].get('f2', 20.0),
-                                      ftaper=step['params'].get('ftaper', 5.0),
-                                      maxmix=step['params'].get('maxmix', 0),
-                                      direction=step['params'].get('direction', 'both'),
-                                      attenuation=step['params'].get('attenuation', 1.0),
-                                      from_processed=True)
-                elif t == 'dsout':
-                    dsout_results.append(self._apply_dsout(
-                        file_id,
-                        step['params'].get('path', ''),
-                        sort_type=step['params'].get('sort_type', 'none'),
-                        first_min=step['params'].get('first_min'),
-                        first_max=step['params'].get('first_max'),
-                        second_min=step['params'].get('second_min'),
-                        second_max=step['params'].get('second_max'),
-                        from_processed=True,
-                    ))
-            except Exception as e:
-                raise RuntimeError(f"Step '{t}' failed: {str(e)}")
-
-        return {'status': 'ok', 'steps': steps, 'dsout': dsout_results}
+        from wave_cmp.legacy_pipeline import run_sequence
+        return run_sequence(self, file_id, steps, parallel, num_workers, cancelled_error=CancelledError)
 
     def get_processed_visualization(self, file_id: str, max_traces: int = 500, max_samples: int = 2000, sort_mode: str = 'none', inline: int = None, crossline: int = None, num_gathers: int = 1) -> Optional[Dict[str, Any]]:
         if file_id not in self.files or 'processed' not in self.files[file_id]:
@@ -2121,6 +1952,10 @@ class SGYHandler:
             'ffid_chan_ranges': ffid_chan_ranges,
             'unique_chans': unique_chans,
         }
+        # Keep persisted lineage when opening a processed dataset in the viewer.
+        for _key in ('is_processed', 'source_file_id', 'processing_desc', 'file_hash', 'created_at'):
+            if _key in meta:
+                self.files[file_id][_key] = meta[_key]
         save_file_meta(file_id, self.files[file_id])
         return file_id
 

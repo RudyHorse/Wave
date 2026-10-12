@@ -49,7 +49,7 @@ def save_data(file_id: str, data: np.ndarray):
 def load_data(file_id: str) -> Optional[np.ndarray]:
     path = data_path(file_id)
     if os.path.exists(path):
-        return np.load(path)
+        return np.load(path, mmap_mode='c', allow_pickle=False)
     return None
 
 
@@ -66,8 +66,8 @@ def save_cdp_offset(file_id: str, cdp: np.ndarray, offset: np.ndarray):
 def load_cdp_offset(file_id: str):
     cp = cdp_path(file_id)
     op = offset_path(file_id)
-    cdp = np.load(cp) if os.path.exists(cp) else None
-    offset = np.load(op) if os.path.exists(op) else None
+    cdp = np.load(cp, mmap_mode='c', allow_pickle=False) if os.path.exists(cp) else None
+    offset = np.load(op, mmap_mode='c', allow_pickle=False) if os.path.exists(op) else None
     return cdp, offset
 
 
@@ -88,24 +88,24 @@ def save_ffid_chan(file_id: str, ffid: np.ndarray, chan: np.ndarray):
 def load_ffid_chan(file_id: str):
     fp = ffid_path(file_id)
     cp = chan_path(file_id)
-    ffid = np.load(fp) if os.path.exists(fp) else None
-    chan = np.load(cp) if os.path.exists(cp) else None
+    ffid = np.load(fp, mmap_mode='c', allow_pickle=False) if os.path.exists(fp) else None
+    chan = np.load(cp, mmap_mode='c', allow_pickle=False) if os.path.exists(cp) else None
     return ffid, chan
 
 
 def load_ffid_offset(file_id: str):
     fp = ffid_path(file_id)
     op = offset_path(file_id)
-    ffid = np.load(fp) if os.path.exists(fp) else None
-    offset = np.load(op) if os.path.exists(op) else None
+    ffid = np.load(fp, mmap_mode='c', allow_pickle=False) if os.path.exists(fp) else None
+    offset = np.load(op, mmap_mode='c', allow_pickle=False) if os.path.exists(op) else None
     return ffid, offset
 
 
 def load_inline_xline(file_id: str):
     ip = inline_path(file_id)
     xp = xline_path(file_id)
-    inline = np.load(ip) if os.path.exists(ip) else None
-    xline = np.load(xp) if os.path.exists(xp) else None
+    inline = np.load(ip, mmap_mode='c', allow_pickle=False) if os.path.exists(ip) else None
+    xline = np.load(xp, mmap_mode='c', allow_pickle=False) if os.path.exists(xp) else None
     return inline, xline
 
 
@@ -116,7 +116,7 @@ def save_processed(file_id: str, run_id: str, data: np.ndarray):
 def load_processed(file_id: str, run_id: str) -> Optional[np.ndarray]:
     path = os.path.join(processed_dir(file_id), f'{run_id}.npy')
     if os.path.exists(path):
-        return np.load(path)
+        return np.load(path, mmap_mode='c', allow_pickle=False)
     return None
 
 

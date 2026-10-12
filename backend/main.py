@@ -482,3 +482,9 @@ async def delete_file(file_id: str):
         raise HTTPException(status_code=404, detail="File not found")
     
     return DeleteResponse(status="deleted")
+
+# Wave CMP extension: additive routes; original API remains available.
+from database import DB_PATH as _cmp_db_path
+from storage import STORAGE_DIR as _cmp_storage_root
+from wave_cmp.api import install as _install_cmp
+_install_cmp(app, _cmp_db_path, _cmp_storage_root)

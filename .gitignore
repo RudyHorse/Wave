@@ -23,3 +23,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# CMP extension installer state (apply_wave_cmp.py)
+.wave-cmp-backups/
+.wave_cmp_install.json

@@ -1,3 +1,5 @@
+import { SpectrumModal, AutocorrelationModal, FxSpectrumModal, SnrModal, FkSpectrumModal } from './features/analysis/lazyModals'
+import VelocityLauncher from './features/velocity/VelocityLauncher'
 import { useState, useRef, useCallback, useMemo, useEffect } from 'react'
 import axios from 'axios'
 import FileUpload from './components/FileUpload'
@@ -5,11 +7,10 @@ import DatabasePanel from './components/DatabasePanel'
 import ProcessingPanel from './components/ProcessingPanel'
 import ProcessingModal from './components/ProcessingModal'
 import Visualization from './components/Visualization'
-import SpectrumModal from './components/SpectrumModal'
-import AutocorrelationModal from './components/AutocorrelationModal'
-import FxSpectrumModal from './components/FxSpectrumModal'
-import SnrModal from './components/SnrModal'
-import FkSpectrumModal from './components/FkSpectrumModal'
+
+
+
+
 
 const API_BASE = '/api'
 
@@ -785,6 +786,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
 
           <DatabasePanel storedFiles={storedFiles} showDatabase={showDatabase} onToggle={setShowDatabase} />
 
+          <VelocityLauncher fileId={fileId} onOutputCreated={fetchStoredFiles} />
           <ProcessingPanel
             fileId={fileId}
             onRun={(steps, parallel, numWorkers, inputFileId, outputName, dsinConfig, inputSortConfig) => handleRunProcessing(steps, parallel, numWorkers, inputFileId, outputName, dsinConfig, inputSortConfig)}

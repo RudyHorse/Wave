@@ -3,3 +3,8 @@ uvicorn>=0.30.0
 python-multipart>=0.0.12
 numpy>=1.26.0
 segyio>=1.9.0,<2.0
+# Already imported by the original SGYHandler; declare it explicitly.
+scipy>=1.11
+
+# CMP contracts use Pydantic v2 (same FastAPI stack).
+pydantic>=2.6,<3

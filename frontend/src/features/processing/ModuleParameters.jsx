@@ -1,5 +1,5 @@
 import { AVAILABLE_MODULES, SORT_OPTIONS, SORT_KEY_LABELS, DSIN_SAMPLE_RATES } from './moduleDefinitions'
-export default function ModuleParameters({ mod, idx, updateParam }) {
+export default function ModuleParameters({ mod, idx, updateParam, velocityFiles }) {
   return (<>
 {mod.id === 'fxdecont' && (
                 <>
@@ -123,6 +123,116 @@ export default function ModuleParameters({ mod, idx, updateParam }) {
                     <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" max="1000" step="0.1"
                       value={mod.params.highcut} onChange={(e) => updateParam(idx, 'highcut', Number(e.target.value))} disabled={!mod.enabled} />
                   </div>
+                </>
+              )}
+              {mod.id === 'nmo' && (
+                <>
+                  <div className="module-param">
+                    <label className="param-label">Velocity file</label>
+                    <select className={`param-select ${!mod.enabled ? 'param-disabled' : ''}`} value={mod.params.velocityFileId}
+                      onChange={(e) => updateParam(idx, 'velocityFileId', e.target.value)} disabled={!mod.enabled} style={{ width: '100%' }}>
+                      <option value="">-- Select saved velocity file --</option>
+                      {(velocityFiles || []).map(f => <option key={f.id} value={f.id}>{f.name} - r{f.revision}</option>)}
+                    </select>
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Offset units</label>
+                    <div className="mode-selector" style={{ marginTop: '4px' }}>
+                      <span className={`mode-option${mod.params.offsetUnits === 'm' ? ' active' : ''}`}
+                        onClick={() => !mod.enabled ? null : updateParam(idx, 'offsetUnits', 'm')}>m</span>
+                      <span className={`mode-option${mod.params.offsetUnits === 'ft' ? ' active' : ''}`}
+                        onClick={() => !mod.enabled ? null : updateParam(idx, 'offsetUnits', 'ft')}>ft</span>
+                    </div>
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Offset convention</label>
+                    <div className="mode-selector" style={{ marginTop: '4px' }}>
+                      <span className={`mode-option${mod.params.offsetConvention === 'full' ? ' active' : ''}`}
+                        onClick={() => !mod.enabled ? null : updateParam(idx, 'offsetConvention', 'full')}>Full</span>
+                      <span className={`mode-option${mod.params.offsetConvention === 'half' ? ' active' : ''}`}
+                        onClick={() => !mod.enabled ? null : updateParam(idx, 'offsetConvention', 'half')}>Half</span>
+                    </div>
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">First sample time (ms)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="1"
+                      value={mod.params.startTimeMs} onChange={(e) => updateParam(idx, 'startTimeMs', Math.max(0, Number(e.target.value)))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Interpolation</label>
+                    <select className={`param-select ${!mod.enabled ? 'param-disabled' : ''}`} value={mod.params.interpolation}
+                      onChange={(e) => updateParam(idx, 'interpolation', e.target.value)} disabled={!mod.enabled} style={{ width: '100%' }}>
+                      <option value="linear">Linear</option>
+                      <option value="sinc">Windowed sinc, 16 taps</option>
+                    </select>
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Stretch mute (%)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="1" step="1"
+                      value={mod.params.stretchLimit} onChange={(e) => updateParam(idx, 'stretchLimit', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Stretch transition (%-points)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="1"
+                      value={mod.params.stretchTaper} onChange={(e) => updateParam(idx, 'stretchTaper', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Inline (blank = all)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" step="1"
+                      value={mod.params.inline} onChange={(e) => updateParam(idx, 'inline', e.target.value)} disabled={!mod.enabled}
+                      placeholder="All inlines" />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">CDP range</label>
+                    <div className="param-row" style={{ gap: '6px' }}>
+                      <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" placeholder="from"
+                        value={mod.params.cdpMin} onChange={(e) => updateParam(idx, 'cdpMin', e.target.value)} disabled={!mod.enabled} />
+                      <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" placeholder="to"
+                        value={mod.params.cdpMax} onChange={(e) => updateParam(idx, 'cdpMax', e.target.value)} disabled={!mod.enabled} />
+                    </div>
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Offset range (m)</label>
+                    <div className="param-row" style={{ gap: '6px' }}>
+                      <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" placeholder="min"
+                        value={mod.params.minOffset} onChange={(e) => updateParam(idx, 'minOffset', e.target.value)} disabled={!mod.enabled} />
+                      <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" placeholder="max (blank = all)"
+                        value={mod.params.maxOffset} onChange={(e) => updateParam(idx, 'maxOffset', e.target.value)} disabled={!mod.enabled} />
+                    </div>
+                  </div>
+                </>
+              )}
+              {mod.id === 'stack' && (
+                <>
+                  <div className="module-param">
+                    <label className="param-label">Method</label>
+                    <select className={`param-select ${!mod.enabled ? 'param-disabled' : ''}`} value={mod.params.method}
+                      onChange={(e) => updateParam(idx, 'method', e.target.value)} disabled={!mod.enabled} style={{ width: '100%' }}>
+                      <option value="mean">Mean</option>
+                      <option value="sum">Sum</option>
+                      <option value="median">Median</option>
+                      <option value="trimmed_mean">Trimmed mean</option>
+                    </select>
+                  </div>
+                  {mod.params.method === 'trimmed_mean' && (
+                    <div className="module-param">
+                      <label className="param-label">Trim each tail (%)</label>
+                      <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" max="49" step="1"
+                        value={mod.params.trim} onChange={(e) => updateParam(idx, 'trim', Number(e.target.value))} disabled={!mod.enabled} />
+                    </div>
+                  )}
+                  <div className="module-param">
+                    <label className="param-label">Minimum fold</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="1" step="1"
+                      value={mod.params.minFold} onChange={(e) => updateParam(idx, 'minFold', Math.max(1, Number(e.target.value)))} disabled={!mod.enabled} />
+                  </div>
+                  <label className="toggle-row" style={{ fontSize: '12px', padding: '4px 0' }}>
+                    <span>Input already NMO corrected</span>
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={mod.params.alreadyNmo} onChange={(e) => updateParam(idx, 'alreadyNmo', e.target.checked)} disabled={!mod.enabled} />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </label>
                 </>
               )}
               {mod.id === 'fk3d' && (

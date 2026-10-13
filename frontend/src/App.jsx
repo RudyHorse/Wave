@@ -211,6 +211,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
     abortRef.current = controller
 
     let activeFileId = fileId
+    let cmpJobId = null
 
     try {
       if (dsinConfig) {
@@ -239,7 +240,73 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
         setSyncView(nv)
       }
 
-      if (steps.length > 0) {
+      const hasCmpSteps = steps.some(s => s.type === 'nmo' || s.type === 'stack')
+      if (hasCmpSteps) {
+        if (dsinConfig) {
+          setError('NMO/STACK requires a saved dataset: load the input from the database (Input module) or upload it first')
+          return
+        }
+        const allowed = ['agc', 'bandpass', 'nmo', 'stack']
+        const bad = steps.find(s => !allowed.includes(s.type))
+        if (bad) {
+          setError(`NMO/STACK can only be combined with AGC and Bandpass steps (found: ${bad.type})`)
+          return
+        }
+        if (!outputName) {
+          setError('Output name is required for NMO/STACK processing')
+          return
+        }
+        const nmoStep = steps.find(s => s.type === 'nmo')
+        const stackStep = steps.find(s => s.type === 'stack')
+        if (nmoStep && !nmoStep.params.velocity_file_id) {
+          setError('NMO requires a saved velocity file (pick and save one in the Velocity window)')
+          return
+        }
+        const cmpSteps = steps.map(s => {
+          if (s.type === 'agc') return { type: 'agc', params: { window_ms: s.params.window_ms } }
+          if (s.type === 'bandpass') return { type: 'bandpass', params: { lowcut: s.params.lowcut, lowpass: s.params.lowpass, highpass: s.params.highpass, highcut: s.params.highcut } }
+          if (s.type === 'nmo') return { type: 'nmo', params: { interpolation: s.params.interpolation, sinc_half_width: s.params.sinc_half_width, stretch_limit: s.params.stretch_limit, stretch_taper: s.params.stretch_taper } }
+          return { type: 'stack', params: { method: s.params.method, trim_fraction: s.params.trim_fraction, min_fold: s.params.min_fold } }
+        })
+        const request = {
+          dataset_id: activeFileId,
+          output_name: outputName,
+          velocity_file_id: nmoStep ? nmoStep.params.velocity_file_id : null,
+          geometry: nmoStep ? nmoStep.params.geometry : { offset_units: 'm', offset_convention: 'full', start_time_ms: 0 },
+          inline: nmoStep ? nmoStep.params.inline : null,
+          cdp_min: nmoStep ? nmoStep.params.cdp_min : null,
+          cdp_max: nmoStep ? nmoStep.params.cdp_max : null,
+          min_offset_m: nmoStep ? nmoStep.params.min_offset_m : 0,
+          max_offset_m: nmoStep ? nmoStep.params.max_offset_m : null,
+          input_already_nmo: stackStep ? !!stackStep.params.input_already_nmo : false,
+          steps: cmpSteps,
+        }
+        const jobRes = await axios.post(`${API_BASE}/cmp/jobs`, request, { signal: controller.signal })
+        let job = jobRes.data
+        cmpJobId = job.id
+        while (job.status === 'queued' || job.status === 'running') {
+          await new Promise(resolve => setTimeout(resolve, 700))
+          const res = await axios.get(`${API_BASE}/cmp/jobs/${job.id}`, { signal: controller.signal })
+          job = res.data
+        }
+        if (job.status !== 'succeeded') {
+          setError(job.error || `CMP job finished with status: ${job.status}`)
+          return
+        }
+        const loadRes = await axios.post(`${API_BASE}/load-from-db`, { file_id: job.result_id })
+        activeFileId = loadRes.data.file_id
+        setFileId(activeFileId)
+        setFileName(loadRes.data.file_name)
+        setStatistics(loadRes.data.statistics)
+        setVisualizationData(loadRes.data.visualization)
+        setProcessedData(null)
+        const nv = { xrange: [0, loadRes.data.visualization.traces], yrange: [0, loadRes.data.visualization.samples] }
+        syncViewRef.current = nv
+        setSyncView(nv)
+        setSuccessMessage(`Created "${outputName}" (CMP ${job.status})`)
+        setTimeout(() => setSuccessMessage(null), 3000)
+        fetchStoredFiles()
+      } else if (steps.length > 0) {
         const runRes = await axios.post(`${API_BASE}/process/run/${activeFileId}`, { steps, parallel: parallel || false, num_workers: numWorkers || 4 }, { signal: controller.signal })
         const hasSignalSteps = steps.some(s => s.type !== 'dsout')
         if (hasSignalSteps) {
@@ -257,16 +324,26 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
           setSuccessMessage(`Saved ${dsoutResults[0].traces} traces to ${dsoutResults[0].path}`)
           setTimeout(() => setSuccessMessage(null), 4000)
         }
-      }
 
-      if (outputName) {
+        if (outputName) {
+          await axios.post(`${API_BASE}/save-to-db/${activeFileId}`, { name: outputName })
+          setSuccessMessage(`Saved "${outputName}" to DB`)
+          setTimeout(() => setSuccessMessage(null), 2500)
+          fetchStoredFiles()
+        }
+      } else if (outputName) {
         await axios.post(`${API_BASE}/save-to-db/${activeFileId}`, { name: outputName })
         setSuccessMessage(`Saved "${outputName}" to DB`)
         setTimeout(() => setSuccessMessage(null), 2500)
         fetchStoredFiles()
       }
     } catch (err) {
-      if (axios.isCancel(err)) return
+      if (axios.isCancel(err)) {
+        if (cmpJobId) {
+          try { await axios.post(`${API_BASE}/cmp/jobs/${cmpJobId}/cancel`) } catch (e) {}
+        }
+        return
+      }
       if (err.response?.status === 409) return
       setError(err.response?.data?.detail || 'Processing failed')
     } finally {
@@ -786,7 +863,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
 
           <DatabasePanel storedFiles={storedFiles} showDatabase={showDatabase} onToggle={setShowDatabase} />
 
-          <VelocityLauncher fileId={fileId} onOutputCreated={fetchStoredFiles} />
+          <VelocityLauncher fileId={fileId} />
           <ProcessingPanel
             fileId={fileId}
             onRun={(steps, parallel, numWorkers, inputFileId, outputName, dsinConfig, inputSortConfig) => handleRunProcessing(steps, parallel, numWorkers, inputFileId, outputName, dsinConfig, inputSortConfig)}

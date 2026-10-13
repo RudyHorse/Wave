@@ -10,18 +10,18 @@ class Boundary extends Component {
     return this.props.children
   }
 }
-export default function VelocityLauncher({ fileId, onOutputCreated }) {
+export default function VelocityLauncher({ fileId }) {
   const [open, setOpen] = useState(false)
   return <>
     <div className="card">
       <div className="card-header">CMP processing</div>
       <div className="card-body">
-        <button className="btn btn-primary" onClick={() => setOpen(true)}>Velocity / NMO / STACK</button>
+        <button className="btn btn-primary" onClick={() => setOpen(true)}>Velocity picking</button>
       </div>
     </div>
     {open && <Boundary onClose={() => setOpen(false)}>
       <Suspense fallback={<div role="status">Loading CMP workspace...</div>}>
-        <Workbench initialFileId={fileId} onClose={() => setOpen(false)} onOutputCreated={onOutputCreated} />
+        <Workbench initialFileId={fileId} onClose={() => setOpen(false)} />
       </Suspense>
     </Boundary>}
   </>

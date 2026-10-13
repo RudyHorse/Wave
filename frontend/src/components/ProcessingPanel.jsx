@@ -1,6 +1,7 @@
 import ModuleParameters from '../features/processing/ModuleParameters'
 import { serializeModule } from '../features/processing/serializeModule'
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
+import axios from 'axios'
 
 import Module from '../features/processing/ProcessingModule'
 import { AVAILABLE_MODULES, SORT_OPTIONS, SORT_KEY_LABELS, DSIN_SAMPLE_RATES } from '../features/processing/moduleDefinitions'
@@ -10,12 +11,23 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
   const [numWorkers, setNumWorkers] = useState(4)
   const [showAddDropdown, setShowAddDropdown] = useState(false)
   const dragIdx = useRef(null)
+  const [velocityFiles, setVelocityFiles] = useState([])
 
   const [inputModule, setInputModule] = useState({ id: 'input', title: 'Input', params: { selectedFileId: '', sortType: 'none', firstMin: '', firstMax: '', secondMin: '', secondMax: '' } })
   const [procModules, setProcModules] = useState([])
   const [outputModule, setOutputModule] = useState({ id: 'output', title: 'Output', params: { outputName: '' } })
   const [inputOpen, setInputOpen] = useState(true)
   const [outputOpen, setOutputOpen] = useState(true)
+
+  const velocitySourceId = inputModule.params.selectedFileId || fileId || ''
+  useEffect(() => {
+    if (!velocitySourceId) { setVelocityFiles([]); return undefined }
+    let cancelled = false
+    axios.get(`/api/cmp/velocity-files`, { params: { source_file_id: velocitySourceId } })
+      .then(res => { if (!cancelled) setVelocityFiles(res.data || []) })
+      .catch(() => { if (!cancelled) setVelocityFiles([]) })
+    return () => { cancelled = true }
+  }, [velocitySourceId])
 
   const hasInput = inputModule.params.selectedFileId
   const hasDsin = procModules.some(m => m.id === 'dsin' && m.enabled && (m.params.path || '').trim())
@@ -194,7 +206,7 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
               dragIndex={idx}
               onRemove={() => removeModule(idx)}
             >
-              <ModuleParameters mod={mod} idx={idx} updateParam={updateParam} />
+              <ModuleParameters mod={mod} idx={idx} updateParam={updateParam} velocityFiles={velocityFiles} />
             </Module>
           ))}
 

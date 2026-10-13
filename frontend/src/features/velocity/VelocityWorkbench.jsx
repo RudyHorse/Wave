@@ -3,8 +3,6 @@ import { cmpApi, apiError, isCancelled, downloadUrl } from './api'
 import { addPick, editPick, functionKey, fromFunctions, historyReducer, toFunctions } from './picks'
 import { useLatestRequest } from './useLatestRequest'
 import { VelocityPlot, GatherPlot, NmoQC } from './Plots'
-import JobPanel from './JobPanel'
-import StackViewer from './StackViewer'
 import './velocity.css'
 
 function readDraft(key) {
@@ -18,7 +16,7 @@ function NumberField({ label, value, onChange, ...rest }) {
   return <label>{label}<input type="number" value={value} onChange={e => onChange(e.target.value === '' ? '' : Number(e.target.value))} {...rest} /></label>
 }
 
-function Session({ dataset, onCreated }) {
+function Session({ dataset }) {
   const draftKey = `wave-velocity-draft:${dataset.id}:${dataset.fingerprint}`
   const initialDraft = useRef(readDraft(draftKey)).current
   const [history, dispatch] = useReducer(historyReducer, { past: [], present: initialDraft?.picks || {}, future: [] })
@@ -238,13 +236,10 @@ function Session({ dataset, onCreated }) {
       </section>
     </>}
     {error && <div role="alert" className="cmp-error">{error}<button onClick={() => setError('')}>Dismiss</button></div>}
-    {dataset.kind !== 'stack' && <JobPanel dataset={dataset} geometry={options.geometry} selection={selection} velocityId={velocityId}
-      velocityDirty={dirty} nmoParams={nmo} onCreated={onCreated} />}
-    {dataset.kind === 'stack' && <StackViewer dataset={dataset} />}
   </>
 }
 
-export default function VelocityWorkbench({ initialFileId, onClose, onOutputCreated }) {
+export default function VelocityWorkbench({ initialFileId, onClose }) {
   const dialog = useRef(null)
   const [datasets, setDatasets] = useState([])
   const [selected, setSelected] = useState(initialFileId || '')
@@ -272,20 +267,19 @@ export default function VelocityWorkbench({ initialFileId, onClose, onOutputCrea
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
   }, [selected])
-  const created = useCallback(() => { refresh(); onOutputCreated?.() }, [refresh, onOutputCreated])
   return <dialog ref={dialog} className="cmp-dialog" onCancel={e => { e.preventDefault(); onClose() }} aria-labelledby="cmp-title">
-    <header className="cmp-topbar"><h2 id="cmp-title">Wave - Velocity Analysis / NMO / STACK</h2><button onClick={onClose}>Close</button></header>
+    <header className="cmp-topbar"><h2 id="cmp-title">Wave - Velocity Analysis</h2><button onClick={onClose}>Close</button></header>
     <div className="cmp-workspace">
       <div className="cmp-controls">
         <label>Stored input dataset<select value={selected} onChange={e => setSelected(e.target.value)}>
           <option value="">Select a saved dataset</option>{datasets.map(d => <option key={d.id} value={d.id}>{d.name} ({d.trace_count} traces)</option>)}</select></label>
         <button onClick={refresh}>Refresh database</button>
       </div>
-      <p className="cmp-hint">Picks have a local browser draft. Only "Save new revision to SQLite" creates a velocity file in the database. Processing jobs continue when this window is closed.</p>
+      <p className="cmp-hint">Picks have a local browser draft. Only "Save new revision to SQLite" creates a velocity file in the database. NMO and STACK now run in the Processing panel.</p>
       {loading && <p role="status">Opening memory-mapped dataset and checking its fingerprint...</p>}
       {error && <p role="alert" className="cmp-error">{error}</p>}
       {!loading && !dataset && <p>Import/save a SEG-Y dataset using the existing Wave database controls first.</p>}
-      {dataset && <Session key={`${dataset.id}:${dataset.fingerprint}`} dataset={dataset} onCreated={created} />}
+      {dataset && <Session key={`${dataset.id}:${dataset.fingerprint}`} dataset={dataset} />}
     </div>
   </dialog>
 }

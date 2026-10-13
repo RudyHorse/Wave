@@ -12,6 +12,10 @@ export function serializeModule(mod) {
         steps.push({ type: 'psf', title: mod.title, params: { phase_deg: mod.params.phaseDeg } })
       } else if (mod.id === 'bandpass') {
         steps.push({ type: 'bandpass', title: mod.title, params: { lowcut: mod.params.lowcut, lowpass: mod.params.lowpass, highpass: mod.params.highpass, highcut: mod.params.highcut } })
+      } else if (mod.id === 'nmo') {
+        steps.push({ type: 'nmo', title: mod.title, params: { velocity_file_id: mod.params.velocityFileId || null, geometry: { offset_units: mod.params.offsetUnits, offset_convention: mod.params.offsetConvention, start_time_ms: Number(mod.params.startTimeMs) || 0 }, interpolation: mod.params.interpolation, sinc_half_width: 8, stretch_limit: (Number(mod.params.stretchLimit) || 30) / 100, stretch_taper: (Number(mod.params.stretchTaper) || 0) / 100, min_offset_m: Number(mod.params.minOffset) || 0, max_offset_m: mod.params.maxOffset === '' ? null : Number(mod.params.maxOffset), cdp_min: mod.params.cdpMin === '' ? null : Number(mod.params.cdpMin), cdp_max: mod.params.cdpMax === '' ? null : Number(mod.params.cdpMax), inline: mod.params.inline === '' ? null : Number(mod.params.inline) } })
+      } else if (mod.id === 'stack') {
+        steps.push({ type: 'stack', title: mod.title, params: { method: mod.params.method, trim_fraction: (Number(mod.params.trim) || 0) / 100, min_fold: Number(mod.params.minFold) || 1, input_already_nmo: !!mod.params.alreadyNmo } })
       } else if (mod.id === 'fk3d') {
         steps.push({ type: 'fk3d', title: mod.title, params: { wndw_inline: mod.params.wndwInline, wndw_xline: mod.params.wndwXline, overlap_inline: mod.params.overlapInline, overlap_xline: mod.params.overlapXline, min_dip_inline: mod.params.minDipInline, max_dip_inline: mod.params.maxDipInline, min_dip_xline: mod.params.minDipXline, max_dip_xline: mod.params.maxDipXline, pct_dip_taper: mod.params.pctDipTaper, wrap_filt: mod.params.wrapFilt } })
       } else if (mod.id === 'gain') {

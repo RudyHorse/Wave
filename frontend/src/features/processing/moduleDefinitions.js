@@ -6,6 +6,8 @@ export const AVAILABLE_MODULES = [
   { id: 'agc', title: 'AGC', params: { windowMs: 100 } },
   { id: 'psf', title: 'PSF', params: { phaseDeg: 30 } },
   { id: 'bandpass', title: 'Bandpass Filter', params: { lowcut: 5, lowpass: 10, highpass: 80, highcut: 100 } },
+  { id: 'nmo', title: 'NMO', params: { velocityFileId: '', offsetUnits: 'm', offsetConvention: 'full', startTimeMs: 0, interpolation: 'linear', stretchLimit: 30, stretchTaper: 5, minOffset: 0, maxOffset: '', cdpMin: '', cdpMax: '', inline: '' } },
+  { id: 'stack', title: 'STACK', params: { method: 'mean', trim: 10, minFold: 1, alreadyNmo: false } },
   { id: 'fk3d', title: 'FK3D Dip Filter', params: { wndwInline: 48, wndwXline: 48, overlapInline: 12, overlapXline: 12, minDipInline: -12, maxDipInline: 12, minDipXline: -12, maxDipXline: 12, pctDipTaper: 10, wrapFilt: true } },
   { id: 'gain', title: 'GAIN', params: { voption: 2.0, toption: 1.0, factor: 1.0, units: 'feet' } },
   { id: 'lfaf', title: 'LFAF', params: { dx: 25, vel: 1500, f1: 0, f2: 20, ftaper: 5, maxmix: 0 } },

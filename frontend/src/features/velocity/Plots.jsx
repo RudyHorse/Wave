@@ -49,13 +49,3 @@ export const NmoQC = memo(function NmoQC({ preview, revisionKey }) {
     <GatherPlot panel={preview.after} title="After NMO - identical amplitude scale" amplitude={amplitude} revisionKey={revisionKey} />
   </div>
 })
-
-export const SectionPlot = memo(function SectionPlot({ section }) {
-  const data = useMemo(() => section ? [{ type: 'heatmap', x: section.cdps, y: section.times_ms, z: section.data,
-    colorscale: section.kind === 'amplitude' ? 'RdBu' : 'Viridis', colorbar: { thickness: 12 },
-    ...(section.kind === 'amplitude' ? { zmid: 0 } : {}),
-    hovertemplate: 'CDP=%{x}<br>T=%{y} ms<br>%{z:.4g}<extra></extra>' }] : [], [section])
-  if (!section) return null
-  return <Plot data={data} layout={{ ...base, title: `Stack QC: ${section.kind}`, xaxis: { title: 'CDP' }, height: 540 }}
-    config={config} style={{ width: '100%' }} useResizeHandler />
-})

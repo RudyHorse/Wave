@@ -21,7 +21,7 @@ npm install
 **Terminal 1 (Backend):**
 ```powershell
 cd backend
-uvicorn main:app --reload --port 8000
+uvicorn main:app --reload --port 8010
 ```
 
 **Terminal 2 (Frontend):**

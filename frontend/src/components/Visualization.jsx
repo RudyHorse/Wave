@@ -56,7 +56,7 @@ const Visualization = memo(function Visualization({ data, isLoading, compact, se
       : Array.from({ length: data?.samples || 0 }, (_, i) => i).filter((_, i) => i % ySampleStride === 0)
     const yTimeTickText = isTimeSlice && data?.inline_labels
       ? data.inline_labels.filter((_, i) => i % Math.max(1, Math.floor(data.inline_labels.length / 10)) === 0)
-      : yTimeTickIdx.map(s => Math.round(s * (data?.sample_step || 1) * (data?.sample_rate || 1)))
+      : yTimeTickIdx.map(s => Math.round((data?.start_time_ms || 0) + s * (data?.sample_step || 1) * (data?.sample_rate || 1)))
 
     const emitSelection = (traceStart, traceEnd, sampleStart, sampleEnd) => {
       if (!onSelection) return

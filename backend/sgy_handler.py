@@ -299,8 +299,22 @@ class SGYHandler:
             raise CancelledError("Processing cancelled by user")
 
     def _remove_processed(self, file_id: str):
-        if file_id in self.files and 'processed' in self.files[file_id]:
-            del self.files[file_id]['processed']
+        if file_id in self.files:
+            self.files[file_id].pop('processed', None)
+            self.files[file_id].pop('processed_rate', None)
+            self.files[file_id].pop('processed_start', None)
+
+    def _effective_sample_rate(self, f, from_processed: bool) -> float:
+        if from_processed:
+            rate = f.get('processed_rate')
+            if rate:
+                return float(rate)
+        return float(f.get('sample_rate') or 1.0)
+
+    def _effective_start_time(self, f, from_processed: bool) -> float:
+        if from_processed:
+            return float(f.get('processed_start') or 0.0)
+        return 0.0
 
     def load_file(self, file_path: str, file_name: str, trace_len: Optional[int] = None, sample_rate: Optional[float] = None, dedup: bool = True, persist: bool = True) -> str:
         file_id = str(len(self.files))
@@ -822,7 +836,7 @@ class SGYHandler:
 
         spec = np.fft.rfft(data, axis=1)
         n_freqs = spec.shape[1]
-        freqs = np.fft.rfftfreq(n_time, d=f['sample_rate'] / 1000.0)
+        freqs = np.fft.rfftfreq(n_time, d=self._effective_sample_rate(f, from_processed) / 1000.0)
         if freq_max <= 0:
             freq_mask = np.ones(n_freqs, dtype=bool)
         else:
@@ -977,7 +991,7 @@ class SGYHandler:
                 if col is not None:
                     volume[:, inline_idx, col] = sorted_data[i, :]
 
-        dt_ms = f['sample_rate']
+        dt_ms = self._effective_sample_rate(f, from_processed)
         filt = FKFilter3D(dt_ms, 1.0, 1.0)
         filtered = filt.filter(volume,
                                wndw_inline=wndw_inline, wndw_xline=wndw_xline,
@@ -1019,9 +1033,10 @@ class SGYHandler:
             return None
         f = self.files[file_id]
         data = f['processed']['data'] if from_processed and 'processed' in f else f['data']
-        sample_rate_ms = f['sample_rate']
+        sample_rate_ms = self._effective_sample_rate(f, from_processed)
+        start_time_ms = self._effective_start_time(f, from_processed)
         n_traces, n_samples = data.shape
-        sample_times = np.arange(n_samples) * sample_rate_ms
+        sample_times = start_time_ms + np.arange(n_samples) * sample_rate_ms
         vel_table = _GAIN_VELOCITY_FEET if units == 'feet' else _GAIN_VELOCITY_METERS
         v_interp = np.interp(sample_times, vel_table[:, 0], vel_table[:, 1],
                              left=vel_table[0, 1], right=vel_table[-1, 1])
@@ -1044,7 +1059,7 @@ class SGYHandler:
             return None
         f = self.files[file_id]
         data = f['processed']['data'] if from_processed and 'processed' in f else f['data']
-        dt_s = f['sample_rate'] / 1000.0
+        dt_s = self._effective_sample_rate(f, from_processed) / 1000.0
         n_traces, n_samples = data.shape
         nyquist = 0.5 / dt_s
         if f1 < 0:
@@ -1092,7 +1107,7 @@ class SGYHandler:
             return None
         f = self.files[file_id]
         data = f['processed']['data'] if from_processed and 'processed' in f else f['data']
-        dt_s = f['sample_rate'] / 1000.0
+        dt_s = self._effective_sample_rate(f, from_processed) / 1000.0
         n_traces, n_samples = data.shape
         nyquist = 0.5 / dt_s
         if f1 < 0:
@@ -1156,7 +1171,7 @@ class SGYHandler:
             offsets = f.get('offset_arr')
             if offsets is None:
                 offsets = np.arange(n_traces, dtype=np.float64)
-            sr_ms = f['sample_rate']
+            sr_ms = self._effective_sample_rate(f, from_processed)
             mute_samples = min(int(mute_time / sr_ms) if sr_ms > 0 else 0, n_samples)
             for i in range(n_traces):
                 off = offsets[i] if isinstance(offsets, np.ndarray) and len(offsets) == n_traces else 0.0
@@ -1179,7 +1194,7 @@ class SGYHandler:
         f = self.files[file_id]
         data = f['processed']['data'] if from_processed and 'processed' in f else f['data']
         n_traces, n_samples = data.shape
-        dt_s = float(f.get('sample_rate', 1.0)) / 1000.0
+        dt_s = self._effective_sample_rate(f, from_processed) / 1000.0
         if dt_s <= 0:
             dt_s = 0.001
 
@@ -1216,6 +1231,67 @@ class SGYHandler:
             'params': params,
         }
         return {'status': 'ok', 'type': 'lfafn', 'params': params}
+
+    def _apply_resample(self, file_id: str, sample_interval=None, start_time=None, end_time=None, from_processed: bool = False) -> Optional[Dict[str, Any]]:
+        if file_id not in self.files:
+            return None
+
+        f = self.files[file_id]
+        data = np.asarray(
+            f['processed']['data'] if from_processed and 'processed' in f else f['data'],
+            dtype=np.float32,
+        )
+        n_traces, n_samples = data.shape
+
+        def _num(value):
+            if value is None or value == '':
+                return None
+            return float(value)
+
+        cur_dt = self._effective_sample_rate(f, from_processed)
+        cur_start = self._effective_start_time(f, from_processed)
+        cur_end = cur_start + (n_samples - 1) * cur_dt
+
+        dt = _num(sample_interval)
+        if dt is None:
+            dt = cur_dt
+        if dt <= 0:
+            raise ValueError('Sample interval must be positive')
+
+        t0 = _num(start_time)
+        if t0 is None:
+            t0 = 0.0
+        t1 = _num(end_time)
+        if t1 is None:
+            t1 = cur_end
+
+        requested = (t0, t1)
+        t0 = max(t0, cur_start)
+        t1 = min(t1, cur_end)
+        if t1 < t0:
+            raise ValueError(f'Requested time range {requested[0]:g}..{requested[1]:g} ms is outside the available {cur_start:g}..{cur_end:g} ms')
+
+        n_new = int(np.floor((t1 - t0) / dt + 1e-9)) + 1
+        times = t0 + np.arange(n_new, dtype=np.float64) * dt
+
+        if abs(dt - cur_dt) < 1e-9 and abs(t0 - cur_start) < 1e-9 and n_new == n_samples:
+            result = data.copy()
+        else:
+            axis = cur_start + np.arange(n_samples, dtype=np.float64) * cur_dt
+            result = np.empty((n_traces, n_new), dtype=np.float32)
+            for i in range(n_traces):
+                self._check_cancel(file_id)
+                result[i] = np.interp(times, axis, data[i]).astype(np.float32)
+
+        params = {'sample_interval': dt, 'start_time': t0, 'end_time': t1}
+        self.files[file_id]['processed'] = {
+            'data': result,
+            'type': 'resample',
+            'params': params,
+        }
+        self.files[file_id]['processed_rate'] = dt
+        self.files[file_id]['processed_start'] = t0
+        return {'status': 'ok', 'type': 'resample', 'params': params}
 
     def _apply_dsout(self, file_id: str, path: str, sort_type: str = 'none', first_min=None, first_max=None, second_min=None, second_max=None, from_processed: bool = False) -> Optional[Dict[str, Any]]:
         if file_id not in self.files:
@@ -1315,11 +1391,12 @@ class SGYHandler:
         out_dir = os.path.dirname(os.path.abspath(path))
         os.makedirs(out_dir, exist_ok=True)
 
-        sample_rate = float(f.get('sample_rate') or 1.0)
+        sample_rate = self._effective_sample_rate(f, from_processed)
         if sample_rate <= 0:
             sample_rate = 1.0
+        start_time_ms = self._effective_start_time(f, from_processed)
         dt_us = max(1, int(round(sample_rate * 1000.0)))
-        samples_ms = np.round(np.arange(n_samples) * sample_rate, 6)
+        samples_ms = np.round(start_time_ms + np.arange(n_samples) * sample_rate, 6)
 
         spec = segyio.spec()
         spec.samples = samples_ms
@@ -1337,6 +1414,7 @@ class SGYHandler:
                     segyio.TraceField.TRACE_SEQUENCE_FILE: j + 1,
                     segyio.TraceField.TRACE_SAMPLE_COUNT: n_samples,
                     segyio.TraceField.TRACE_SAMPLE_INTERVAL: dt_us,
+                    segyio.TraceField.DelayRecordingTime: int(round(start_time_ms)),
                 }
                 if inline_arr is not None and len(inline_arr) == n_traces:
                     hdr[segyio.TraceField.INLINE_3D] = int(inline_arr[idx])
@@ -1493,7 +1571,8 @@ class SGYHandler:
             'trace_step': trace_step,
             'sample_step': sample_step,
             'samples_original': num_samples,
-            'sample_rate': f['sample_rate'],
+            'sample_rate': self._effective_sample_rate(f, True),
+            'start_time_ms': self._effective_start_time(f, True),
             'sort_mode': sort_mode,
         }
 
@@ -1521,7 +1600,7 @@ class SGYHandler:
 
         f = self.files[file_id]
         data = f['processed']['data'] if use_processed and 'processed' in f else f['data']
-        sample_rate_ms = f['sample_rate']
+        sample_rate_ms = self._effective_sample_rate(f, use_processed)
         dt_s = sample_rate_ms / 1000.0
 
         t_start = max(0, trace_start)
@@ -1560,7 +1639,7 @@ class SGYHandler:
 
         f = self.files[file_id]
         data = f['processed']['data'] if use_processed and 'processed' in f else f['data']
-        sample_rate_ms = f['sample_rate']
+        sample_rate_ms = self._effective_sample_rate(f, use_processed)
 
         t_start = max(0, trace_start)
         t_end = min(data.shape[0], trace_end)
@@ -1599,7 +1678,7 @@ class SGYHandler:
 
         f = self.files[file_id]
         data = f['processed']['data'] if use_processed and 'processed' in f else f['data']
-        sample_rate_ms = f['sample_rate']
+        sample_rate_ms = self._effective_sample_rate(f, use_processed)
         dt_s = sample_rate_ms / 1000.0
 
         t_start = max(0, trace_start)
@@ -1683,7 +1762,7 @@ class SGYHandler:
 
         f = self.files[file_id]
         data = f['processed']['data'] if use_processed and 'processed' in f else f['data']
-        sample_rate_ms = f['sample_rate']
+        sample_rate_ms = self._effective_sample_rate(f, use_processed)
         dt_s = sample_rate_ms / 1000.0
 
         t_start = max(0, trace_start)
@@ -2173,7 +2252,7 @@ class SGYHandler:
             'file_size': file_size,
             'trace_count': data.shape[0],
             'samples_per_trace': data.shape[1],
-            'sample_rate': f.get('sample_rate', 1.0),
+            'sample_rate': self._effective_sample_rate(f, True),
             'min_amplitude': float(data.min()),
             'max_amplitude': float(data.max()),
             'ffid_min': f.get('ffid_min', 0), 'ffid_max': f.get('ffid_max', 0),

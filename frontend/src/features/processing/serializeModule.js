@@ -12,6 +12,8 @@ export function serializeModule(mod) {
         steps.push({ type: 'psf', title: mod.title, params: { phase_deg: mod.params.phaseDeg } })
       } else if (mod.id === 'bandpass') {
         steps.push({ type: 'bandpass', title: mod.title, params: { lowcut: mod.params.lowcut, lowpass: mod.params.lowpass, highpass: mod.params.highpass, highcut: mod.params.highcut } })
+      } else if (mod.id === 'resample') {
+        steps.push({ type: 'resample', title: mod.title, params: { sample_interval: mod.params.sampleInterval === '' ? null : Number(mod.params.sampleInterval), start_time: mod.params.startTime === '' ? null : Number(mod.params.startTime), end_time: mod.params.endTime === '' ? null : Number(mod.params.endTime) } })
       } else if (mod.id === 'nmo') {
         steps.push({ type: 'nmo', title: mod.title, params: { velocity_file_id: mod.params.velocityFileId || null, geometry: { offset_units: mod.params.offsetUnits, offset_convention: mod.params.offsetConvention, start_time_ms: Number(mod.params.startTimeMs) || 0 }, interpolation: mod.params.interpolation, sinc_half_width: 8, stretch_limit: (Number(mod.params.stretchLimit) || 30) / 100, stretch_taper: (Number(mod.params.stretchTaper) || 0) / 100, min_offset_m: Number(mod.params.minOffset) || 0, max_offset_m: mod.params.maxOffset === '' ? null : Number(mod.params.maxOffset), cdp_min: mod.params.cdpMin === '' ? null : Number(mod.params.cdpMin), cdp_max: mod.params.cdpMax === '' ? null : Number(mod.params.cdpMax), inline: mod.params.inline === '' ? null : Number(mod.params.inline) } })
       } else if (mod.id === 'stack') {

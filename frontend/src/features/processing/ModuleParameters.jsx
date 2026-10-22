@@ -125,6 +125,28 @@ export default function ModuleParameters({ mod, idx, updateParam, velocityFiles 
                   </div>
                 </>
               )}
+              {mod.id === 'resample' && (
+                <>
+                  <div className="module-param">
+                    <label className="param-label">Sample interval (ms)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0.01" step="0.1"
+                      value={mod.params.sampleInterval} onChange={(e) => updateParam(idx, 'sampleInterval', e.target.value)} disabled={!mod.enabled}
+                      placeholder="As input" />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Start time (ms)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="1"
+                      value={mod.params.startTime} onChange={(e) => updateParam(idx, 'startTime', e.target.value)} disabled={!mod.enabled}
+                      placeholder="0" />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">End time (ms)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="1"
+                      value={mod.params.endTime} onChange={(e) => updateParam(idx, 'endTime', e.target.value)} disabled={!mod.enabled}
+                      placeholder="Last time" />
+                  </div>
+                </>
+              )}
               {mod.id === 'nmo' && (
                 <>
                   <div className="module-param">

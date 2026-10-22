@@ -26,6 +26,7 @@ REGISTRY={
  'lfaf':LegacyProcessor('_apply_lfaf',defaults=dict(dx=25.,vel=1500.,f1=0.,f2=20.,ftaper=5.,maxmix=0)),
  'lfaf1':LegacyProcessor('_apply_lfaf1',defaults=dict(vel=1500.,f1=0.,f2=20.,ftaper=5.,maxmix=15,min_offset=10.,mute_time=0.,mute_zone_width=50.)),
  'lfafn':LegacyProcessor('_apply_lfafn',defaults=dict(dx=25.,vel=1500.,f1=0.,f2=20.,ftaper=5.,maxmix=0,direction='both',attenuation=1.)),
+ 'resample':LegacyProcessor('_apply_resample',defaults=dict(sample_interval=None,start_time=None,end_time=None)),
  'dsout':LegacyProcessor('_apply_dsout',defaults=dict(path='',sort_type='none',first_min=None,first_max=None,second_min=None,second_max=None)),
 }
 _running=set()
@@ -41,6 +42,8 @@ def run_sequence(handler,file_id,steps,parallel=False,num_workers=4,*,cancelled_
             raise ValueError('A legacy processing sequence is already running for this file')
         _running.add(key)
     previous=handler.files[file_id].pop('processed',None)
+    previous_rate=handler.files[file_id].pop('processed_rate',None)
+    previous_start=handler.files[file_id].pop('processed_start',None)
     try:
         # Validate complete sequence before any processor, particularly DSOUT, runs.
         prepared=[]
@@ -72,10 +75,11 @@ def run_sequence(handler,file_id,steps,parallel=False,num_workers=4,*,cancelled_
         return {'status':'ok','steps':steps,'dsout':outputs}
     except BaseException:
         if file_id in handler.files:
-            if previous is None:
-                handler.files[file_id].pop('processed',None)
-            else:
-                handler.files[file_id]['processed']=previous
+            for key,value in (('processed',previous),('processed_rate',previous_rate),('processed_start',previous_start)):
+                if value is None:
+                    handler.files[file_id].pop(key,None)
+                else:
+                    handler.files[file_id][key]=value
         raise
     finally:
         with _guard:

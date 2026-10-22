@@ -48,7 +48,15 @@ const Visualization = memo(function Visualization({ data, isLoading, compact, se
 
     const xTickLabels = isTimeSlice ? data.xline_labels : sortMode === 'inline_xline' && data?.xline_labels ? data.xline_labels : sortMode === 'crossline_xline' && data?.inline_labels ? data.inline_labels : sortMode === 'cdp_offset' && data?.offset_labels ? data.offset_labels : sortMode === 'ffid_offset' && data?.offset_labels_ffid ? data.offset_labels_ffid : sortMode === 'ffid_chan' && data?.chan_labels ? data.chan_labels : null
 
-    const yAxisTitle = isTimeSlice ? 'Inline' : 'Sample'
+    const yAxisTitle = isTimeSlice ? 'Inline' : 'Time (ms)'
+
+    const ySampleStride = Math.max(1, Math.floor((data?.samples || 0) / 10))
+    const yTimeTickIdx = isTimeSlice && data?.inline_labels
+      ? data.inline_labels.map((_, i) => i).filter((_, i) => i % Math.max(1, Math.floor(data.inline_labels.length / 10)) === 0)
+      : Array.from({ length: data?.samples || 0 }, (_, i) => i).filter((_, i) => i % ySampleStride === 0)
+    const yTimeTickText = isTimeSlice && data?.inline_labels
+      ? data.inline_labels.filter((_, i) => i % Math.max(1, Math.floor(data.inline_labels.length / 10)) === 0)
+      : yTimeTickIdx.map(s => Math.round(s * (data?.sample_step || 1) * (data?.sample_rate || 1)))
 
     const emitSelection = (traceStart, traceEnd, sampleStart, sampleEnd) => {
       if (!onSelection) return
@@ -182,12 +190,8 @@ const Visualization = memo(function Visualization({ data, isLoading, compact, se
               zeroline: false,
               autorange: 'reversed',
               range: syncView ? syncView.yrange : undefined,
-              tickvals: isTimeSlice && data?.inline_labels
-                ? data.inline_labels.map((_, i) => i).filter((_, i) => i % Math.max(1, Math.floor(data.inline_labels.length / 10)) === 0)
-                : undefined,
-              ticktext: isTimeSlice && data?.inline_labels
-                ? data.inline_labels.filter((_, i) => i % Math.max(1, Math.floor(data.inline_labels.length / 10)) === 0)
-                : undefined,
+              tickvals: yTimeTickIdx.length > 0 ? yTimeTickIdx : undefined,
+              ticktext: yTimeTickText.length > 0 ? yTimeTickText : undefined,
             },
             dragmode: selectionMode ? 'select' : 'pan',
             hovermode: 'closest',

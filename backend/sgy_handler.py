@@ -1,5 +1,6 @@
 import numpy as np
 import segyio
+import uuid
 from pathlib import Path
 from typing import Dict, Any, Optional
 import tempfile
@@ -317,7 +318,7 @@ class SGYHandler:
         return 0.0
 
     def load_file(self, file_path: str, file_name: str, trace_len: Optional[int] = None, sample_rate: Optional[float] = None, dedup: bool = True, persist: bool = True) -> str:
-        file_id = str(len(self.files))
+        file_id = str(uuid.uuid4())
         
         try:
             sha256 = hashlib.sha256()
@@ -2229,7 +2230,7 @@ class SGYHandler:
         f = self.files[file_id]
         has_processed = 'processed' in f and f['processed'] is not None
         data = f['processed']['data'] if has_processed else f['data']
-        new_id = f'{file_id}_proc_{len([x for x in self.list_stored_files() if x["source_file_id"] == file_id])}'
+        new_id = f'{file_id}_proc_{uuid.uuid4().hex[:8]}'
         save_data(new_id, data)
 
         inline_arr, xline_arr, cdp_arr, offset_arr, ffid_arr, chan_arr = self._get_original_key_arrays(file_id)

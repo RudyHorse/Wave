@@ -95,9 +95,7 @@ async def upload_file(file: UploadFile = File(...)):
             content = await file.read()
             buffer.write(content)
         
-        sgy_handler.load_file(file_path, file.filename)
-        
-        stored_id = str(len(sgy_handler.files) - 1)
+        stored_id = sgy_handler.load_file(file_path, file.filename)
         
         return UploadResponse(
             file_id=stored_id,

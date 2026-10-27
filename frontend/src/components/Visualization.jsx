@@ -1,7 +1,7 @@
 import { memo, useRef } from 'react'
 import Plot from 'react-plotly.js'
 
-const Visualization = memo(function Visualization({ data, isLoading, compact, selectionMode, onSelection, syncView, onViewChange, colorscale, paletteMin, paletteMax, amplitudeScale, showColorbar, sortMode }) {
+const Visualization = memo(function Visualization({ data, isLoading, compact, selectionMode, onSelection, syncView, onViewChange, colorscale, paletteMin, paletteMax, amplitudeScale, showColorbar, sortMode, displayMode }) {
   const lastSel = useRef(0)
 
   const renderContent = () => {
@@ -57,6 +57,94 @@ const Visualization = memo(function Visualization({ data, isLoading, compact, se
     const yTimeTickText = isTimeSlice && data?.inline_labels
       ? data.inline_labels.filter((_, i) => i % Math.max(1, Math.floor(data.inline_labels.length / 10)) === 0)
       : yTimeTickIdx.map(s => Math.round((data?.start_time_ms || 0) + s * (data?.sample_step || 1) * (data?.sample_rate || 1)))
+
+    const effectiveMode = isTimeSlice ? 'heatmap' : (displayMode || 'heatmap')
+
+    let plotData
+    if (effectiveMode === 'heatmap') {
+      plotData = [
+        {
+          z: zData,
+          type: 'heatmap',
+          colorscale: colorscale || 'RdBu',
+          zmid: 0,
+          zmin: paletteMin,
+          zmax: paletteMax,
+          showscale: showColorbar !== false,
+          colorbar: {
+            titleside: 'right',
+            thickness: 15,
+            len: 0.8,
+          },
+        },
+      ]
+    } else {
+      let maxAbs = 0
+      for (const row of data.data) {
+        for (const v of row) {
+          if (v != null && Number.isFinite(v) && Math.abs(v) > maxAbs) maxAbs = Math.abs(v)
+        }
+      }
+      const wScale = (scale / (maxAbs || 1)) * 0.45
+
+      plotData = []
+      for (let t = 0; t < data.traces; t++) {
+        const xs = []
+        const ys = []
+        for (let s = 0; s < data.samples; s++) {
+          const v = data.data[t]?.[s]
+          if (v == null || !Number.isFinite(v)) {
+            xs.push(NaN)
+            ys.push(s)
+          } else {
+            xs.push(t + v * wScale)
+            ys.push(s)
+          }
+        }
+        plotData.push({
+          type: 'scattergl',
+          x: xs,
+          y: ys,
+          mode: 'lines',
+          line: { color: '#e6edf3', width: 1 },
+          hoverinfo: 'skip',
+          showlegend: false,
+        })
+      }
+
+      if (effectiveMode === 'wiggle_va') {
+        const MAX_VA_TRACES = 100
+        const vaStep = Math.max(1, Math.ceil(data.traces / MAX_VA_TRACES))
+        const vaSampleStride = Math.max(1, Math.ceil(data.samples / 1000))
+        for (let t = 0; t < data.traces; t += vaStep) {
+          const idxs = []
+          for (let s = 0; s < data.samples; s += vaSampleStride) idxs.push(s)
+          const xs = []
+          const ys = []
+          for (const s of idxs) {
+            const v = data.data[t]?.[s]
+            const w = v != null && Number.isFinite(v) && v > 0 ? v * wScale : 0
+            xs.push(t + w)
+            ys.push(s)
+          }
+          for (let i = idxs.length - 1; i >= 0; i--) {
+            xs.push(t)
+            ys.push(idxs[i])
+          }
+          plotData.push({
+            type: 'scatter',
+            x: xs,
+            y: ys,
+            mode: 'lines',
+            line: { color: '#e6edf3', width: 0.5 },
+            fill: 'toself',
+            fillcolor: 'rgba(0, 212, 170, 0.25)',
+            hoverinfo: 'skip',
+            showlegend: false,
+          })
+        }
+      }
+    }
 
     const emitSelection = (traceStart, traceEnd, sampleStart, sampleEnd) => {
       if (!onSelection) return
@@ -148,22 +236,7 @@ const Visualization = memo(function Visualization({ data, isLoading, compact, se
     return (
       <div className="viz-canvas-container">
         <Plot
-          data={[
-            {
-              z: zData,
-              type: 'heatmap',
-              colorscale: colorscale || 'RdBu',
-              zmid: 0,
-              zmin: paletteMin,
-              zmax: paletteMax,
-              showscale: showColorbar !== false,
-              colorbar: {
-                titleside: 'right',
-                thickness: 15,
-                len: 0.8,
-              },
-            },
-          ]}
+          data={plotData}
           layout={{
             autosize: true,
             margin: { l: 40, r: 20, t: 10, b: 40 },

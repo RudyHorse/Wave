@@ -54,6 +54,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
   const [paletteMax, setPaletteMax] = useState('')
   const [amplitudeScale, setAmplitudeScale] = useState(100)
   const [showColorbar, setShowColorbar] = useState(true)
+  const [displayMode, setDisplayMode] = useState('heatmap')
   const [sortMode, setSortMode] = useState('none')
   const [hasInlineXline, setHasInlineXline] = useState(false)
   const [inlineList, setInlineList] = useState([])
@@ -884,6 +885,14 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
             </div>
             {displayOpen && (
             <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+              <div className="param-row">
+                <span className="param-label">Display mode</span>
+                <select className="param-select" value={displayMode} onChange={(e) => setDisplayMode(e.target.value)} style={{ flex: 1 }}>
+                  <option value="heatmap">Heatmap</option>
+                  <option value="wiggle">Wiggle</option>
+                  <option value="wiggle_va">Wiggle + Variable area</option>
+                </select>
+              </div>
               <div className="subblock">
                 <div className="subblock-header" onClick={() => setWindowsOpen(!windowsOpen)}>
                   <span className={`collapse-icon ${windowsOpen ? '' : 'collapsed'}`}>&#9660;</span>
@@ -1431,6 +1440,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                 amplitudeScale={amplitudeScale}
                 showColorbar={showColorbar}
                 sortMode={sortMode}
+                displayMode={displayMode}
               />
             </div>
           ))}
@@ -1451,6 +1461,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                 amplitudeScale={amplitudeScale}
                 showColorbar={showColorbar}
                 sortMode={sortMode}
+                displayMode={displayMode}
               />
             </div>
           )}

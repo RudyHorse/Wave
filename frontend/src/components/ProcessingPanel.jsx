@@ -13,13 +13,13 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
   const dragIdx = useRef(null)
   const [velocityFiles, setVelocityFiles] = useState([])
 
-  const [inputModule, setInputModule] = useState({ id: 'input', title: 'Input', params: { selectedFileId: '', sortType: 'none', firstMin: '', firstMax: '', secondMin: '', secondMax: '' } })
+  const [inputModule, setInputModule] = useState({ id: 'input', title: 'Input', enabled: true, params: { selectedFileId: '', sortType: 'none', firstMin: '', firstMax: '', secondMin: '', secondMax: '' } })
   const [procModules, setProcModules] = useState([])
-  const [outputModule, setOutputModule] = useState({ id: 'output', title: 'Output', params: { outputName: '' } })
+  const [outputModule, setOutputModule] = useState({ id: 'output', title: 'Output', enabled: true, params: { outputName: '' } })
   const [inputOpen, setInputOpen] = useState(true)
   const [outputOpen, setOutputOpen] = useState(true)
 
-  const velocitySourceId = inputModule.params.selectedFileId || fileId || ''
+  const velocitySourceId = inputModule.enabled ? (inputModule.params.selectedFileId || fileId || '') : ''
   useEffect(() => {
     if (!velocitySourceId) { setVelocityFiles([]); return undefined }
     let cancelled = false
@@ -29,11 +29,12 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
     return () => { cancelled = true }
   }, [velocitySourceId])
 
-  const hasInput = inputModule.params.selectedFileId
+  const hasInput = inputModule.enabled && inputModule.params.selectedFileId
   const hasDsin = procModules.some(m => m.id === 'dsin' && m.enabled && (m.params.path || '').trim())
   const canRun = !!(fileId || hasInput || hasDsin)
   const hasEnabledProc = procModules.some(m => m.enabled)
-  const hasOutput = !!outputModule.params.outputName
+  const hasOutput = outputModule.enabled && !!outputModule.params.outputName
+  const sortedAvailableModules = [...AVAILABLE_MODULES].sort((a, b) => a.title.localeCompare(b.title))
 
   const updateParam = (idx, key, val) => {
     setProcModules(prev => {
@@ -96,7 +97,7 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
     let dsinConfig = null
     let inputSortConfig = null
     let outputName = null
-    if (inputModule.params.selectedFileId) {
+    if (inputModule.enabled && inputModule.params.selectedFileId) {
       inputFileId = inputModule.params.selectedFileId
       const st = inputModule.params.sortType
       if (st && st !== 'none') {
@@ -109,7 +110,7 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
         }
       }
     }
-    if (outputModule.params.outputName) {
+    if (outputModule.enabled && outputModule.params.outputName) {
       outputName = outputModule.params.outputName
     }
     for (const mod of procModules) {
@@ -141,13 +142,14 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
       </div>
       {isOpen && (
         <div className="card-body" style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-          <Module title="Input" paramsOpen={inputOpen} onToggleParams={setInputOpen}>
+          <Module title="Input" enabled={inputModule.enabled} onToggle={(v) => setInputModule({ ...inputModule, enabled: v })} paramsOpen={inputOpen} onToggleParams={setInputOpen}>
             <div className="module-param">
               <label className="param-label">Source file</label>
               <select
-                className="param-select"
+                className={`param-select ${!inputModule.enabled ? 'param-disabled' : ''}`}
                 value={inputModule.params.selectedFileId}
                 onChange={(e) => setInputModule({ ...inputModule, params: { ...inputModule.params, selectedFileId: e.target.value } })}
+                disabled={!inputModule.enabled}
                 style={{ width: '100%' }}
               >
                 <option value="">-- Select --</option>
@@ -158,8 +160,9 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
             </div>
             <div className="module-param">
               <label className="param-label">Sort order</label>
-              <select className="param-select" value={inputModule.params.sortType}
+              <select className={`param-select ${!inputModule.enabled ? 'param-disabled' : ''}`} value={inputModule.params.sortType}
                 onChange={(e) => setInputModule({ ...inputModule, params: { ...inputModule.params, sortType: e.target.value } })}
+                disabled={!inputModule.enabled}
                 style={{ width: '100%' }}>
                 {SORT_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
@@ -172,19 +175,19 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
                   <div className="module-param">
                     <label className="param-label">{keys.first} range (first key)</label>
                     <div className="param-row" style={{ gap: '6px' }}>
-                      <input className="param-input" type="number" placeholder="min"
-                        value={inputModule.params.firstMin} onChange={(e) => setP('firstMin', e.target.value)} />
-                      <input className="param-input" type="number" placeholder="max"
-                        value={inputModule.params.firstMax} onChange={(e) => setP('firstMax', e.target.value)} />
+                      <input className={`param-input ${!inputModule.enabled ? 'param-disabled' : ''}`} type="number" placeholder="min"
+                        value={inputModule.params.firstMin} onChange={(e) => setP('firstMin', e.target.value)} disabled={!inputModule.enabled} />
+                      <input className={`param-input ${!inputModule.enabled ? 'param-disabled' : ''}`} type="number" placeholder="max"
+                        value={inputModule.params.firstMax} onChange={(e) => setP('firstMax', e.target.value)} disabled={!inputModule.enabled} />
                     </div>
                   </div>
                   <div className="module-param">
                     <label className="param-label">{keys.second} range (second key)</label>
                     <div className="param-row" style={{ gap: '6px' }}>
-                      <input className="param-input" type="number" placeholder="min"
-                        value={inputModule.params.secondMin} onChange={(e) => setP('secondMin', e.target.value)} />
-                      <input className="param-input" type="number" placeholder="max"
-                        value={inputModule.params.secondMax} onChange={(e) => setP('secondMax', e.target.value)} />
+                      <input className={`param-input ${!inputModule.enabled ? 'param-disabled' : ''}`} type="number" placeholder="min"
+                        value={inputModule.params.secondMin} onChange={(e) => setP('secondMin', e.target.value)} disabled={!inputModule.enabled} />
+                      <input className={`param-input ${!inputModule.enabled ? 'param-disabled' : ''}`} type="number" placeholder="max"
+                        value={inputModule.params.secondMax} onChange={(e) => setP('secondMax', e.target.value)} disabled={!inputModule.enabled} />
                     </div>
                   </div>
                 </>
@@ -222,7 +225,7 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
                 borderRadius: 'var(--radius)', maxHeight: '200px', overflowY: 'auto',
                 marginTop: '2px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
               }}>
-                {AVAILABLE_MODULES.filter(a => !procModules.find(p => p.id === a.id)).map(m => (
+                {sortedAvailableModules.filter(a => !procModules.find(p => p.id === a.id)).map(m => (
                   <div key={m.id} style={{
                     padding: '6px 10px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)',
                     borderBottom: '1px solid var(--border-color)',
@@ -236,13 +239,14 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
             )}
           </div>
 
-          <Module title="Output" paramsOpen={outputOpen} onToggleParams={setOutputOpen}>
+          <Module title="Output" enabled={outputModule.enabled} onToggle={(v) => setOutputModule({ ...outputModule, enabled: v })} paramsOpen={outputOpen} onToggleParams={setOutputOpen}>
             <div className="module-param">
               <label className="param-label">Output name</label>
-              <input className="param-input" type="text"
+              <input className={`param-input ${!outputModule.enabled ? 'param-disabled' : ''}`} type="text"
                 value={outputModule.params.outputName}
                 onChange={(e) => setOutputModule({ ...outputModule, params: { outputName: e.target.value } })}
                 placeholder="e.g. Processed v1"
+                disabled={!outputModule.enabled}
                 style={{ width: '100%' }} />
             </div>
           </Module>

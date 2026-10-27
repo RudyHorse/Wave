@@ -2035,7 +2035,6 @@ class SGYHandler:
         for _key in ('is_processed', 'source_file_id', 'processing_desc', 'file_hash', 'created_at'):
             if _key in meta:
                 self.files[file_id][_key] = meta[_key]
-        save_file_meta(file_id, self.files[file_id])
         return file_id
 
     def _get_original_key_arrays(self, file_id: str):

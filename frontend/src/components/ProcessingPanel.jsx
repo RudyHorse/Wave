@@ -5,7 +5,7 @@ import axios from 'axios'
 
 import Module from '../features/processing/ProcessingModule'
 import { AVAILABLE_MODULES, SORT_OPTIONS, SORT_KEY_LABELS, DSIN_SAMPLE_RATES } from '../features/processing/moduleDefinitions'
-function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
+function ProcessingPanel({ fileId, onRun, onStop, isRunning, storedFiles }) {
   const [isOpen, setIsOpen] = useState(false)
   const [parallel, setParallel] = useState(false)
   const [numWorkers, setNumWorkers] = useState(4)
@@ -268,11 +268,17 @@ function ProcessingPanel({ fileId, onRun, isRunning, storedFiles }) {
             </div>
           )}
 
-          <button className="btn btn-primary" onClick={handleRun}
-            disabled={!canRun || isRunning || !(hasEnabledProc || hasOutput)}
-            style={{ width: '100%' }}>
-            {isRunning ? 'Running...' : 'Run'}
-          </button>
+          {isRunning ? (
+            <button className="btn btn-cancel" onClick={onStop} style={{ width: '100%' }}>
+              Stop
+            </button>
+          ) : (
+            <button className="btn btn-primary" onClick={handleRun}
+              disabled={!canRun || !(hasEnabledProc || hasOutput)}
+              style={{ width: '100%' }}>
+              Run
+            </button>
+          )}
         </div>
       )}
     </div>

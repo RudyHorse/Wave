@@ -49,6 +49,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
   const syncViewRef = useRef(null)
   const [processingSteps, setProcessingSteps] = useState([])
   const abortRef = useRef(null)
+  const cmpJobRef = useRef(null)
   const [colorscale, setColorscale] = useState('Greys')
   const [paletteMin, setPaletteMin] = useState('')
   const [paletteMax, setPaletteMax] = useState('')
@@ -285,6 +286,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
         const jobRes = await axios.post(`${API_BASE}/cmp/jobs`, request, { signal: controller.signal })
         let job = jobRes.data
         cmpJobId = job.id
+        cmpJobRef.current = job.id
         while (job.status === 'queued' || job.status === 'running') {
           await new Promise(resolve => setTimeout(resolve, 700))
           const res = await axios.get(`${API_BASE}/cmp/jobs/${job.id}`, { signal: controller.signal })
@@ -351,6 +353,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
       setIsProcessing(false)
       setProcessingSteps([])
       abortRef.current = null
+      cmpJobRef.current = null
     }
   }
 
@@ -491,6 +494,12 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
   const handleCancelProcessing = async () => {
     if (abortRef.current) {
       abortRef.current.abort()
+    }
+    if (cmpJobRef.current) {
+      try {
+        await axios.post(`${API_BASE}/cmp/jobs/${cmpJobRef.current}/cancel`)
+      } catch (e) {
+      }
     }
     if (fileId) {
       try {
@@ -868,6 +877,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
           <ProcessingPanel
             fileId={fileId}
             onRun={(steps, parallel, numWorkers, inputFileId, outputName, dsinConfig, inputSortConfig) => handleRunProcessing(steps, parallel, numWorkers, inputFileId, outputName, dsinConfig, inputSortConfig)}
+            onStop={handleCancelProcessing}
             isRunning={isProcessing}
             storedFiles={storedFiles}
           />

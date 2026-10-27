@@ -2324,6 +2324,8 @@ class SGYHandler:
             'sort_mode': 'time_slice',
             'selected_sample': sample,
             'samples_original': data.shape[1],
+            'sample_rate': f['sample_rate'],
+            'start_time_ms': 0.0,
         }
 
 

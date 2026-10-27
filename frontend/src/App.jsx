@@ -739,8 +739,12 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
   }
 
   const handleSampleChange = async (sample) => {
-    setSelectedSample(sample)
-    await fetchTimeSlice(sample)
+    const maxS = statistics?.samples_per_trace || 0
+    let s = Number(sample)
+    if (!Number.isFinite(s)) s = 0
+    if (maxS > 0) s = Math.max(0, Math.min(s, maxS - 1))
+    setSelectedSample(s)
+    await fetchTimeSlice(s)
   }
 
   const handleInlineChange = async (il) => {
@@ -1015,7 +1019,9 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                           value={Math.min(selectedSample, maxS - 1)}
                           onChange={(e) => handleSampleChange(Number(e.target.value))}
                           style={{ flex: 1 }} />
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)', minWidth: '60px', textAlign: 'right' }}>{selectedSample}</span>
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)', minWidth: '110px', textAlign: 'right' }}>
+                          {selectedSample} ({Math.round(selectedSample * (statistics?.sample_rate || 0))} ms)
+                        </span>
                       </div>
                     ) : null
                   })()}
@@ -1029,8 +1035,10 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                         <span className="param-label">Sample</span>
                         <input className="param-input" type="number" min="0" max={maxS - 1} style={{ width: '80px' }}
                           value={selectedSample}
-                          onChange={(e) => handleSampleChange(Number(e.target.value))} />
-                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)' }}>/ {maxS - 1}</span>
+                          onChange={(e) => handleSampleChange(e.target.value)} />
+                        <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)' }}>
+                          / {maxS - 1} ({Math.round(selectedSample * (statistics?.sample_rate || 0))} ms)
+                        </span>
                       </div>
                     ) : null
                   })()}
@@ -1410,7 +1418,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                   <span className="inline-badge" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>FFID {win.data.ffid_label}</span>
                 )}
                 {sortMode === 'time_slice' && win.data?.selected_sample != null && (
-                  <span className="inline-badge" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>Sample {win.data.selected_sample}</span>
+                  <span className="inline-badge" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>Sample {win.data.selected_sample} ({Math.round(win.data.selected_sample * (win.data.sample_rate || 0))} ms)</span>
                 )}
                 <div className="analysis-dropdown-wrapper" style={{ marginLeft: 'auto' }}>
                   <button

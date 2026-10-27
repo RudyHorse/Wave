@@ -890,7 +890,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                 <select className="param-select" value={displayMode} onChange={(e) => setDisplayMode(e.target.value)} style={{ flex: 1 }}>
                   <option value="heatmap">Heatmap</option>
                   <option value="wiggle">Wiggle</option>
-                  <option value="wiggle_va">Wiggle + Variable area</option>
+                  <option value="heatmap_wiggle">Heatmap + Wiggle</option>
                 </select>
               </div>
               <div className="subblock">

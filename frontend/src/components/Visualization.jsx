@@ -59,26 +59,28 @@ const Visualization = memo(function Visualization({ data, isLoading, compact, se
       : yTimeTickIdx.map(s => Math.round((data?.start_time_ms || 0) + s * (data?.sample_step || 1) * (data?.sample_rate || 1)))
 
     const effectiveMode = isTimeSlice ? 'heatmap' : (displayMode || 'heatmap')
+    const showHeatmap = effectiveMode === 'heatmap' || effectiveMode === 'heatmap_wiggle'
+    const showWiggle = effectiveMode === 'wiggle' || effectiveMode === 'heatmap_wiggle'
 
-    let plotData
-    if (effectiveMode === 'heatmap') {
-      plotData = [
-        {
-          z: zData,
-          type: 'heatmap',
-          colorscale: colorscale || 'RdBu',
-          zmid: 0,
-          zmin: paletteMin,
-          zmax: paletteMax,
-          showscale: showColorbar !== false,
-          colorbar: {
-            titleside: 'right',
-            thickness: 15,
-            len: 0.8,
-          },
+    let plotData = []
+    if (showHeatmap) {
+      plotData.push({
+        z: zData,
+        type: 'heatmap',
+        colorscale: colorscale || 'RdBu',
+        zmid: 0,
+        zmin: paletteMin,
+        zmax: paletteMax,
+        showscale: showColorbar !== false,
+        opacity: effectiveMode === 'heatmap_wiggle' ? 0.45 : 1,
+        colorbar: {
+          titleside: 'right',
+          thickness: 15,
+          len: 0.8,
         },
-      ]
-    } else {
+      })
+    }
+    if (showWiggle) {
       let maxAbs = 0
       for (const row of data.data) {
         for (const v of row) {
@@ -86,8 +88,8 @@ const Visualization = memo(function Visualization({ data, isLoading, compact, se
         }
       }
       const wScale = (scale / (maxAbs || 1)) * 0.45
+      const wiggleColor = effectiveMode === 'heatmap_wiggle' ? '#f8fafc' : '#e6edf3'
 
-      plotData = []
       for (let t = 0; t < data.traces; t++) {
         const xs = []
         const ys = []
@@ -106,43 +108,10 @@ const Visualization = memo(function Visualization({ data, isLoading, compact, se
           x: xs,
           y: ys,
           mode: 'lines',
-          line: { color: '#e6edf3', width: 1 },
+          line: { color: wiggleColor, width: 1 },
           hoverinfo: 'skip',
           showlegend: false,
         })
-      }
-
-      if (effectiveMode === 'wiggle_va') {
-        const MAX_VA_TRACES = 100
-        const vaStep = Math.max(1, Math.ceil(data.traces / MAX_VA_TRACES))
-        const vaSampleStride = Math.max(1, Math.ceil(data.samples / 1000))
-        for (let t = 0; t < data.traces; t += vaStep) {
-          const idxs = []
-          for (let s = 0; s < data.samples; s += vaSampleStride) idxs.push(s)
-          const xs = []
-          const ys = []
-          for (const s of idxs) {
-            const v = data.data[t]?.[s]
-            const w = v != null && Number.isFinite(v) && v > 0 ? v * wScale : 0
-            xs.push(t + w)
-            ys.push(s)
-          }
-          for (let i = idxs.length - 1; i >= 0; i--) {
-            xs.push(t)
-            ys.push(idxs[i])
-          }
-          plotData.push({
-            type: 'scatter',
-            x: xs,
-            y: ys,
-            mode: 'lines',
-            line: { color: '#e6edf3', width: 0.5 },
-            fill: 'toself',
-            fillcolor: 'rgba(0, 212, 170, 0.25)',
-            hoverinfo: 'skip',
-            showlegend: false,
-          })
-        }
       }
     }
 

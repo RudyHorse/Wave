@@ -144,6 +144,10 @@
         </div>
       </div>
     </div>
+    <div class="field">
+      <label>Resample (optional)</label>
+      <input type="number" id="resampleMs" placeholder="new sample interval in ms (blank = keep)" step="0.001" min="0.001">
+    </div>
     <label class="toggle">
       <input type="checkbox" id="sortToggle">
       Sort output by this key (default keeps input order)
@@ -165,6 +169,7 @@
   var sortToggle = document.getElementById('sortToggle');
   var startTime = document.getElementById('startTime');
   var endTime = document.getElementById('endTime');
+  var resampleMs = document.getElementById('resampleMs');
   var cutBtn = document.getElementById('cutBtn');
   var downloadLink = document.getElementById('downloadLink');
   var keyRangeHint = document.getElementById('keyRangeHint');
@@ -380,11 +385,14 @@
     var maxVal = maxKey.value === '' ? null : Math.floor(Number(maxKey.value));
     var tStart = startTime.value === '' ? null : Number(startTime.value);
     var tEnd = endTime.value === '' ? null : Number(endTime.value);
+    var rMs = resampleMs.value === '' ? null : Number(resampleMs.value);
     if (minKey.value !== '' && !Number.isFinite(minVal)) { say('Invalid min value', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (maxKey.value !== '' && !Number.isFinite(maxVal)) { say('Invalid max value', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (tStart !== null && (!Number.isFinite(tStart) || tStart < 0)) { say('Invalid start time', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (tEnd !== null && (!Number.isFinite(tEnd) || tEnd < 0)) { say('Invalid end time', 'err'); busy = false; cutBtn.disabled = false; return; }
+    if (rMs !== null && (!Number.isFinite(rMs) || rMs <= 0)) { say('Invalid sample interval', 'err'); busy = false; cutBtn.disabled = false; return; }
     var timeCut = computeTimeCut(tStart, tEnd);
+    var resample = computeResample(rMs, timeCut);
     try {
       say('Scanning trace headers ...');
       var sel = await scanHeaders(minVal, maxVal, function (done, total) {
@@ -399,8 +407,9 @@
         order.sort(function (a, b) { return keys[a] - keys[b] || a - b; });
       }
       if (timeCut.applied) say('Time cut: ' + timeCut.startMs + ' - ' + timeCut.endMs + ' ms (' + timeCut.nsOut + ' samples)');
+      if (resample) say('Resample: ' + resample.dtUs + ' \u00b5s interval (' + resample.nsOut + ' samples)');
       say('Writing output (' + fmt(sel.count) + ' traces) ...');
-      resultBlob = await writeOutput(sel, order, timeCut, function (done, total) {
+      resultBlob = await writeOutput(sel, order, timeCut, resample, function (done, total) {
         setProgress(cutProgress, cutBar, done / total);
       });
       var base = meta.name.replace(/\.sgy$/i, '').replace(/\.segy$/i, '');
@@ -443,23 +452,113 @@
     };
   }
 
-  async function writeOutput(sel, order, timeCut, onProgress) {
+  function computeResample(rMs, timeCut) {
+    if (rMs === null) return null;
+    var newDtUs = Math.round(rMs * 1000);
+    if (newDtUs < 1 || newDtUs > 65535) throw new Error('Sample interval must be 0.001 - 65.535 ms');
+    if (Math.abs(rMs * 1000 - newDtUs) > 1e-6) throw new Error('Sample interval must be a whole number of microseconds');
+    if (newDtUs === meta.dtUs) return null;
+    if (meta.fmtCode === 4) throw new Error('Sample format 4 (fixed-point with gain) is not supported for resampling');
+    var srcDtUs = meta.dtUs;
+    var tStartUs = timeCut.startSample * srcDtUs;
+    var tEndUs = timeCut.endSample * srcDtUs;
+    var nsOut = Math.floor((tEndUs - tStartUs) / newDtUs + 1e-9) + 1;
+    if (nsOut < 1) throw new Error('Time range is too short for the requested interval');
+    return {
+      dtUs: newDtUs,
+      nsOut: nsOut,
+      startMs: Math.round(tStartUs / 1000),
+    };
+  }
+
+  function ibmToFloat(u) {
+    if (u === 0) return 0;
+    var sign = (u & 0x80000000) ? -1 : 1;
+    var exp = ((u >>> 24) & 0x7F) - 64;
+    var frac = (u & 0xFFFFFF) / 16777216;
+    return sign * frac * Math.pow(16, exp);
+  }
+
+  function floatToIbm(v) {
+    if (v === 0 || !isFinite(v)) return 0;
+    var sign = v < 0 ? 0x80000000 : 0;
+    var av = Math.abs(v);
+    var exp = Math.floor(Math.log(av) / Math.log(16)) + 65;
+    if (exp < 1) exp = 1;
+    if (exp > 127) exp = 127;
+    var frac = Math.round(av * Math.pow(16, 64 - exp) * 16777216);
+    if (frac >= 16777216) { frac = Math.round(frac / 16); exp += 1; if (exp > 127) exp = 127; }
+    return sign | (exp << 24) | frac;
+  }
+
+  function readSample(view, off, fmt, le) {
+    switch (fmt) {
+      case 1: return ibmToFloat(view.getUint32(off, le));
+      case 2: return view.getInt32(off, le);
+      case 3: return view.getInt16(off, le);
+      case 5: return view.getFloat32(off, le);
+      case 6: return view.getFloat64(off, le);
+      case 7: {
+        var b0 = view.getUint8(off), b1 = view.getUint8(off + 1), b2 = view.getUint8(off + 2);
+        var v = le ? (b0 | (b1 << 8) | (b2 << 16)) : ((b0 << 16) | (b1 << 8) | b2);
+        if (v & 0x800000) v |= 0xFF000000;
+        return v;
+      }
+      case 8: return view.getInt8(off);
+    }
+    return 0;
+  }
+
+  function writeSample(outBuf, outPos, v, fmt, le) {
+    switch (fmt) {
+      case 1: outBuf.setUint32(outPos, floatToIbm(v), le); break;
+      case 2: outBuf.setInt32(outPos, Math.round(v), le); break;
+      case 3: outBuf.setInt16(outPos, Math.round(v), le); break;
+      case 5: outBuf.setFloat32(outPos, v, le); break;
+      case 6: outBuf.setFloat64(outPos, v, le); break;
+      case 7: {
+        var u = Math.round(v);
+        if (u < -8388608) u = -8388608;
+        if (u > 8388607) u = 8388607;
+        u &= 0xFFFFFF;
+        if (le) {
+          outBuf.setUint8(outPos, u & 0xFF);
+          outBuf.setUint8(outPos + 1, (u >>> 8) & 0xFF);
+          outBuf.setUint8(outPos + 2, (u >>> 16) & 0xFF);
+        } else {
+          outBuf.setUint8(outPos, (u >>> 16) & 0xFF);
+          outBuf.setUint8(outPos + 1, (u >>> 8) & 0xFF);
+          outBuf.setUint8(outPos + 2, u & 0xFF);
+        }
+        break;
+      }
+      case 8: outBuf.setInt8(outPos, Math.max(-128, Math.min(127, Math.round(v)))); break;
+    }
+  }
+
+  async function writeOutput(sel, order, timeCut, resample, onProgress) {
     var stride = meta.stride;
-    var strideOut = timeCut.strideOut;
-    var nsOut = timeCut.nsOut;
-    var startSample = timeCut.startSample;
     var bytes = SAMPLE_BYTES[meta.fmtCode];
-    var delayMs = timeCut.startMs;
+    var fmtCode = meta.fmtCode;
+    var nsOut = resample ? resample.nsOut : timeCut.nsOut;
+    var outDtUs = resample ? resample.dtUs : meta.dtUs;
+    var startSample = timeCut.startSample;
+    var delayMs = resample ? resample.startMs : timeCut.startMs;
+    var strideOut = 240 + nsOut * bytes;
     var count = sel.count;
     var parts = [];
     var head = await currentFile.slice(0, 3600).arrayBuffer();
     var dv = new DataView(head);
     dv.setInt16(3212, count > 65535 ? 65535 : count, meta.le);
+    dv.setInt16(3216, outDtUs, meta.le);
+    dv.setInt16(3218, outDtUs, meta.le);
     dv.setInt16(3220, nsOut > 65535 ? 65535 : nsOut, meta.le);
+    dv.setInt16(3222, nsOut > 65535 ? 65535 : nsOut, meta.le);
     dv.setInt32(3468, nsOut, meta.le);
     parts.push(new Blob([head], { type: 'application/octet-stream' }));
     if (meta.dataStart > 3600) parts.push(currentFile.slice(3600, meta.dataStart));
     var outBuf = new Uint8Array(OUT_BYTES);
+    var outView = new DataView(outBuf.buffer, outBuf.byteOffset, outBuf.byteLength);
     var outPos = 0;
     var srcChunkBytes = tracesPerChunk() * stride;
     var cache = new Map();
@@ -486,6 +585,9 @@
         outPos = 0;
       }
     }
+    var cutCount = timeCut.endSample - timeCut.startSample + 1;
+    var work = resample ? new Float64Array(cutCount) : null;
+    var tStartUs = startSample * meta.dtUs;
     for (var j = 0; j < count; j++) {
       var rec = order ? order[j] : sel.selIdx[j];
       var srcPos = rec * stride;
@@ -498,11 +600,27 @@
       var hdr = new DataView(outBuf.buffer, outBuf.byteOffset + outPos, 240);
       hdr.setInt16(108, delayMs, meta.le);
       hdr.setInt16(114, nsOut, meta.le);
-      hdr.setInt16(116, meta.dtUs, meta.le);
+      hdr.setInt16(116, outDtUs, meta.le);
       var srcSamples = off + 240 + startSample * bytes;
-      for (var s = 0; s < nsOut * bytes; s++) outBuf[outPos + 240 + s] = chunk.getUint8(srcSamples + s);
+      if (resample) {
+        for (var k = 0; k < cutCount; k++) work[k] = readSample(chunk, srcSamples + k * bytes, fmtCode, meta.le);
+        for (var s = 0; s < nsOut; s++) {
+          var t = tStartUs + s * resample.dtUs;
+          var p = t / meta.dtUs - startSample;
+          var i0 = Math.floor(p);
+          var f = p - i0;
+          var v;
+          if (i0 >= cutCount - 1) v = work[cutCount - 1];
+          else v = work[i0] * (1 - f) + work[i0 + 1] * f;
+          writeSample(outView, outPos + 240 + s * bytes, v, fmtCode, meta.le);
+        }
+      } else if (timeCut.applied) {
+        for (var c = 0; c < nsOut * bytes; c++) outBuf[outPos + 240 + c] = chunk.getUint8(srcSamples + c);
+      } else {
+        for (var b2 = 0; b2 < nsOut * bytes; b2++) outBuf[outPos + 240 + b2] = chunk.getUint8(srcSamples + b2);
+      }
       outPos += strideOut;
-      if ((j & 4095) === 0) {
+      if ((j & 1023) === 0) {
         if (onProgress) onProgress(j + 1, count);
         await yieldToUi();
       }

@@ -182,6 +182,65 @@ export default function ModuleParameters({ mod, idx, updateParam, velocityFiles 
                   </div>
                 </>
               )}
+              {mod.id === 'ampscal' && (
+                <>
+                  <div className="module-param">
+                    <label className="param-label">Traces in aperture</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="1" max="201" step="2"
+                      value={mod.params.nTraces} onChange={(e) => updateParam(idx, 'nTraces', Math.max(1, Number(e.target.value)))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Low freq (Hz)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="0.1"
+                      value={mod.params.fmin} onChange={(e) => updateParam(idx, 'fmin', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">High freq (Hz)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0.01" step="0.1"
+                      value={mod.params.fmax} onChange={(e) => updateParam(idx, 'fmax', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Mode</label>
+                    <select className={`param-select ${!mod.enabled ? 'param-disabled' : ''}`} value={mod.params.mode}
+                      onChange={(e) => updateParam(idx, 'mode', e.target.value)} disabled={!mod.enabled} style={{ width: '100%' }}>
+                      <option value="spectral_median">Spectral median</option>
+                      <option value="spectral_clip">Spectral clip</option>
+                      <option value="waveform_median">Waveform median</option>
+                    </select>
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Clip threshold (x median)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="1" step="0.1"
+                      value={mod.params.threshold} onChange={(e) => updateParam(idx, 'threshold', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Strength (0-1)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" max="1" step="0.01"
+                      value={mod.params.strength} onChange={(e) => updateParam(idx, 'strength', Math.max(0, Math.min(1, Number(e.target.value))))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Transition taper (Hz)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="0.1"
+                      value={mod.params.transition} onChange={(e) => updateParam(idx, 'transition', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Edge handling</label>
+                    <div className="mode-selector" style={{ marginTop: '4px' }}>
+                      <span className={`mode-option${mod.params.edge === 'shift' ? ' active' : ''}`}
+                        onClick={() => !mod.enabled ? null : updateParam(idx, 'edge', 'shift')}>Shift</span>
+                      <span className={`mode-option${mod.params.edge === 'shrink' ? ' active' : ''}`}
+                        onClick={() => !mod.enabled ? null : updateParam(idx, 'edge', 'shrink')}>Shrink</span>
+                    </div>
+                  </div>
+                  <label className="toggle-row" style={{ fontSize: '12px', padding: '4px 0' }}>
+                    <span>Group by FFID (shots)</span>
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={mod.params.groupByFfid} onChange={(e) => updateParam(idx, 'groupByFfid', e.target.checked)} disabled={!mod.enabled} />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </label>
+                </>
+              )}
               {mod.id === 'nmo' && (
                 <>
                   <div className="module-param">

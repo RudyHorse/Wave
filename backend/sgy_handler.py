@@ -15,6 +15,7 @@ from database import save_file_meta, list_files as db_list_files, get_file_meta,
 from storage import save_data, load_data, save_inline_xline, load_inline_xline, save_cdp_offset, load_cdp_offset, save_ffid_offset, load_ffid_offset, save_ffid_chan, load_ffid_chan, save_processed, load_processed, delete_all as delete_storage, file_exists as storage_file_exists, data_path as storage_data_path
 from fkfilter import FKVelocityFilter
 from suppres import SuppresConfig, GatePoint, GateTable, process as suppres_process
+from ampmedian import AmpMedianConfig, process as ampmedian_process
 
 
 _GAIN_VELOCITY_FEET = np.array([
@@ -1382,6 +1383,66 @@ class SGYHandler:
             'params': params,
         }
         return {'status': 'ok', 'type': 'suppres', 'params': params}
+
+    def _apply_ampscal(self, file_id: str, n_traces: int = 5, fmin_hz: float = 5.0, fmax_hz: float = 80.0, mode: str = 'spectral_median', threshold: float = 1.5, strength: float = 1.0, transition_hz: float = 0.0, edge: str = 'shift', group_by_ffid: bool = True, from_processed: bool = False) -> Optional[Dict[str, Any]]:
+        if file_id not in self.files:
+            return None
+
+        f = self.files[file_id]
+        data = np.asarray(
+            f['processed']['data'] if from_processed and 'processed' in f else f['data'],
+            dtype=np.float32,
+        )
+        n_traces_in, n_samples = data.shape
+        if n_samples < 2:
+            raise ValueError('AMPSCAL requires at least two time samples')
+
+        dt = self._effective_sample_rate(f, from_processed)
+
+        config = AmpMedianConfig(
+            n_traces=int(n_traces),
+            fmin_hz=float(fmin_hz),
+            fmax_hz=float(fmax_hz),
+            mode=mode,
+            threshold=float(threshold),
+            strength=float(strength),
+            transition_hz=float(transition_hz),
+            edge=edge,
+            output_dtype='float32',
+        )
+
+        group_ids = None
+        if group_by_ffid:
+            ffid = f.get('ffid_arr')
+            if ffid is not None and len(ffid) == n_traces_in:
+                group_ids = np.asarray(ffid)
+
+        result = ampmedian_process(
+            data,
+            dt,
+            config=config,
+            group_ids=group_ids,
+            feature_batch_size=8192,
+        )
+        result = np.asarray(result, dtype=np.float32)
+
+        params = {
+            'n_traces': int(n_traces),
+            'fmin_hz': float(fmin_hz),
+            'fmax_hz': float(fmax_hz),
+            'mode': mode,
+            'threshold': float(threshold),
+            'strength': float(strength),
+            'transition_hz': float(transition_hz),
+            'edge': edge,
+            'group_by_ffid': bool(group_by_ffid),
+        }
+        self.files[file_id]['processed'] = {
+            'data': result,
+            'type': 'ampscal',
+            'params': params,
+        }
+        return {'status': 'ok', 'type': 'ampscal', 'params': params}
 
     def _apply_dsout(self, file_id: str, path: str, sort_type: str = 'none', first_min=None, first_max=None, second_min=None, second_max=None, from_processed: bool = False) -> Optional[Dict[str, Any]]:
         if file_id not in self.files:

@@ -28,6 +28,7 @@ REGISTRY={
  'lfafn':LegacyProcessor('_apply_lfafn',defaults=dict(dx=25.,vel=1500.,f1=0.,f2=20.,ftaper=5.,maxmix=0,direction='both',attenuation=1.)),
  'resample':LegacyProcessor('_apply_resample',defaults=dict(sample_interval=None,start_time=None,end_time=None)),
  'suppres':LegacyProcessor('_apply_suppres',defaults=dict(fbeg_hz=3.,fend_hz=18.,factor=0.5,tsmt_ms=60.,taper_ms=120.,gates_text=None)),
+ 'ampscal':LegacyProcessor('_apply_ampscal',defaults=dict(n_traces=5,fmin_hz=5.,fmax_hz=80.,mode='spectral_median',threshold=1.5,strength=1.,transition_hz=0.,edge='shift',group_by_ffid=True)),
  'dsout':LegacyProcessor('_apply_dsout',defaults=dict(path='',sort_type='none',first_min=None,first_max=None,second_min=None,second_max=None)),
 }
 _running=set()

@@ -147,6 +147,41 @@ export default function ModuleParameters({ mod, idx, updateParam, velocityFiles 
                   </div>
                 </>
               )}
+              {mod.id === 'suppres' && (
+                <>
+                  <div className="module-param">
+                    <label className="param-label">FBEG low cutoff (Hz)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="0.1"
+                      value={mod.params.fbeg} onChange={(e) => updateParam(idx, 'fbeg', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">FEND high cutoff (Hz)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0.01" step="0.1"
+                      value={mod.params.fend} onChange={(e) => updateParam(idx, 'fend', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">FACTOR</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="0.01"
+                      value={mod.params.factor} onChange={(e) => updateParam(idx, 'factor', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">TSMT smoothing (ms)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="1" step="1"
+                      value={mod.params.tsmt} onChange={(e) => updateParam(idx, 'tsmt', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">TAPER (ms)</label>
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="1"
+                      value={mod.params.taper} onChange={(e) => updateParam(idx, 'taper', Number(e.target.value))} disabled={!mod.enabled} />
+                  </div>
+                  <div className="module-param">
+                    <label className="param-label">Spatial gates (optional, one per line: pkey skey tbeg tend)</label>
+                    <textarea className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} rows="3"
+                      value={mod.params.gates} onChange={(e) => updateParam(idx, 'gates', e.target.value)} disabled={!mod.enabled}
+                      placeholder={'e.g.\n75 1 2000 3000\n75 150 50 3000'} style={{ width: '100%', resize: 'vertical' }} />
+                  </div>
+                </>
+              )}
               {mod.id === 'nmo' && (
                 <>
                   <div className="module-param">

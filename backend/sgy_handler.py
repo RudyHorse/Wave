@@ -14,6 +14,7 @@ from enum import Enum
 from database import save_file_meta, list_files as db_list_files, get_file_meta, delete_file_meta, find_by_hash
 from storage import save_data, load_data, save_inline_xline, load_inline_xline, save_cdp_offset, load_cdp_offset, save_ffid_offset, load_ffid_offset, save_ffid_chan, load_ffid_chan, save_processed, load_processed, delete_all as delete_storage, file_exists as storage_file_exists, data_path as storage_data_path
 from fkfilter import FKVelocityFilter
+from suppres import SuppresConfig, GatePoint, GateTable, process as suppres_process
 
 
 _GAIN_VELOCITY_FEET = np.array([
@@ -1293,6 +1294,85 @@ class SGYHandler:
         self.files[file_id]['processed_rate'] = dt
         self.files[file_id]['processed_start'] = t0
         return {'status': 'ok', 'type': 'resample', 'params': params}
+
+    def _parse_suppres_gates(self, text):
+        points = []
+        for line in str(text).splitlines():
+            parts = line.replace(',', ' ').split()
+            if not parts:
+                continue
+            if len(parts) < 2:
+                raise ValueError(f'Invalid SUPPRES gate line: {line!r}; expected "pkey skey [tbeg tend]"')
+            pkey = int(parts[0])
+            skey = int(parts[1])
+            tbeg = None if len(parts) < 3 or parts[2] in ('-', '*') else float(parts[2])
+            tend = None if len(parts) < 4 or parts[3] in ('-', '*') else float(parts[3])
+            points.append(GatePoint(pkey, skey, tbeg, tend))
+        if not points:
+            return None
+        return GateTable(points)
+
+    def _apply_suppres(self, file_id: str, fbeg_hz: float = 3.0, fend_hz: float = 18.0, factor: float = 0.5, tsmt_ms: float = 60.0, taper_ms: float = 120.0, gates_text: Optional[str] = None, from_processed: bool = False) -> Optional[Dict[str, Any]]:
+        if file_id not in self.files:
+            return None
+
+        f = self.files[file_id]
+        data = np.asarray(
+            f['processed']['data'] if from_processed and 'processed' in f else f['data'],
+            dtype=np.float32,
+        )
+        n_traces, n_samples = data.shape
+        if n_samples < 2:
+            raise ValueError('SUPPRES requires at least two time samples')
+
+        dt = self._effective_sample_rate(f, from_processed)
+        t0 = self._effective_start_time(f, from_processed)
+
+        config = SuppresConfig(
+            fbeg_hz=float(fbeg_hz),
+            fend_hz=float(fend_hz),
+            factor=float(factor),
+            tsmt_ms=float(tsmt_ms),
+            taper_ms=float(taper_ms),
+        )
+
+        gates = None
+        headers = None
+        if gates_text:
+            gates = self._parse_suppres_gates(gates_text)
+            ffid = f.get('ffid_arr')
+            if ffid is None or len(ffid) != n_traces:
+                raise ValueError('SUPPRES gates require FFID headers, which are not available for this file')
+            chan = f.get('chan_arr')
+            if chan is None or len(chan) != n_traces:
+                chan = np.zeros(n_traces, dtype=np.int64)
+            headers = {'shot': np.asarray(ffid), 'chan': np.asarray(chan)}
+
+        result = suppres_process(
+            data,
+            dt,
+            config=config,
+            headers=headers,
+            gates=gates,
+            t0_ms=t0,
+            batch_size=64,
+        )
+        result = np.asarray(result, dtype=np.float32)
+
+        params = {
+            'fbeg_hz': float(fbeg_hz),
+            'fend_hz': float(fend_hz),
+            'factor': float(factor),
+            'tsmt_ms': float(tsmt_ms),
+            'taper_ms': float(taper_ms),
+            'gates_text': gates_text,
+        }
+        self.files[file_id]['processed'] = {
+            'data': result,
+            'type': 'suppres',
+            'params': params,
+        }
+        return {'status': 'ok', 'type': 'suppres', 'params': params}
 
     def _apply_dsout(self, file_id: str, path: str, sort_type: str = 'none', first_min=None, first_max=None, second_min=None, second_max=None, from_processed: bool = False) -> Optional[Dict[str, Any]]:
         if file_id not in self.files:

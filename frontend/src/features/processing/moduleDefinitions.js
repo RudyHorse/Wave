@@ -7,6 +7,7 @@ export const AVAILABLE_MODULES = [
   { id: 'psf', title: 'PSF', params: { phaseDeg: 30 } },
   { id: 'bandpass', title: 'Bandpass Filter', params: { lowcut: 5, lowpass: 10, highpass: 80, highcut: 100 } },
   { id: 'resample', title: 'Resample', params: { sampleInterval: '', startTime: '', endTime: '' } },
+  { id: 'suppres', title: 'SUPPRES', params: { fbeg: 3, fend: 18, factor: 0.5, tsmt: 60, taper: 120, gates: '' } },
   { id: 'nmo', title: 'NMO', params: { velocityFileId: '', offsetUnits: 'm', offsetConvention: 'full', startTimeMs: 0, interpolation: 'linear', stretchLimit: 30, stretchTaper: 5, minOffset: 0, maxOffset: '', cdpMin: '', cdpMax: '', inline: '' } },
   { id: 'stack', title: 'STACK', params: { method: 'mean', trim: 10, minFold: 1, alreadyNmo: false } },
   { id: 'fk3d', title: 'FK3D Dip Filter', params: { wndwInline: 48, wndwXline: 48, overlapInline: 12, overlapXline: 12, minDipInline: -12, maxDipInline: 12, minDipXline: -12, maxDipXline: 12, pctDipTaper: 10, wrapFilt: true } },

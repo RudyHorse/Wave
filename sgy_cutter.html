@@ -124,6 +124,7 @@
         <input type="number" id="maxKey" placeholder="no limit">
       </div>
     </div>
+    <div id="keyRangeHint" class="dim" style="font-size:12px; margin:-4px 0 12px;"></div>
     <label class="toggle">
       <input type="checkbox" id="sortToggle">
       Sort output by this key (default keeps input order)
@@ -144,7 +145,10 @@
   var sortToggle = document.getElementById('sortToggle');
   var cutBtn = document.getElementById('cutBtn');
   var downloadLink = document.getElementById('downloadLink');
+  var keyRangeHint = document.getElementById('keyRangeHint');
   var log = document.getElementById('log');
+
+  var KEY_OFFSETS = {8: 'FFID', 12: 'CHAN', 20: 'CDP', 36: 'Offset', 188: 'Inline', 192: 'Xline'};
 
   var buffer = null;
   var meta = null;
@@ -221,6 +225,18 @@
       name: name, le: le, fmtCode: fmtCode, dtUs: dtUs, ns: ns,
       extText: extText, dataStart: dataStart, stride: stride, traces: traces,
     };
+    var ranges = {};
+    Object.keys(KEY_OFFSETS).forEach(function (o) { ranges[o] = [Infinity, -Infinity]; });
+    for (var i = 0; i < traces; i++) {
+      var base = dataStart + i * stride;
+      Object.keys(KEY_OFFSETS).forEach(function (o) {
+        var keyOff = parseInt(o, 10);
+        var v = le ? view.getInt32(base + keyOff, true) : view.getInt32(base + keyOff, false);
+        if (v < ranges[o][0]) ranges[o][0] = v;
+        if (v > ranges[o][1]) ranges[o][1] = v;
+      });
+    }
+    meta.keyRanges = ranges;
     if (remainder !== 0) say('Warning: ' + remainder + ' trailing bytes do not match the trace stride', 'dim');
     fileInfo.innerHTML = '';
     var rows = [
@@ -231,6 +247,12 @@
       ['Samples per trace', fmt(ns)],
       ['Extended text headers', extText],
       ['Traces', fmt(traces)],
+      ['FFID range (byte 9)', fmt(ranges[8][0]) + ' - ' + fmt(ranges[8][1])],
+      ['CHAN range (byte 13)', fmt(ranges[12][0]) + ' - ' + fmt(ranges[12][1])],
+      ['CDP range (byte 21)', fmt(ranges[20][0]) + ' - ' + fmt(ranges[20][1])],
+      ['Offset range (byte 37)', fmt(ranges[36][0]) + ' - ' + fmt(ranges[36][1])],
+      ['Inline range (byte 189)', fmt(ranges[188][0]) + ' - ' + fmt(ranges[188][1])],
+      ['Xline range (byte 193)', fmt(ranges[192][0]) + ' - ' + fmt(ranges[192][1])],
     ];
     rows.forEach(function (r) {
       var k = document.createElement('span'); k.textContent = r[0];
@@ -239,8 +261,21 @@
     });
     cutBtn.disabled = false;
     resultBlob = null; downloadLink.style.display = 'none';
+    updateKeyHint();
     say('Loaded ' + name + ': ' + fmt(traces) + ' traces, ' + ns + ' samples, dt ' + dtUs + ' \u00b5s');
   }
+
+  function updateKeyHint() {
+    var o = keySelect.value;
+    if (meta && meta.keyRanges && meta.keyRanges[o]) {
+      var r = meta.keyRanges[o];
+      keyRangeHint.textContent = KEY_OFFSETS[o] + ' range in file: ' + fmt(r[0]) + ' - ' + fmt(r[1]);
+    } else {
+      keyRangeHint.textContent = '';
+    }
+  }
+
+  keySelect.addEventListener('change', updateKeyHint);
 
   cutBtn.addEventListener('click', function () {
     try { cut(); } catch (err) { say('Error: ' + err.message, 'err'); }

@@ -131,6 +131,19 @@
       </div>
     </div>
     <div id="keyRangeHint" class="dim" style="font-size:12px; margin:-4px 0 12px;"></div>
+    <div class="field">
+      <label>Trace time cut (optional)</label>
+      <div class="row">
+        <div class="field">
+          <label>Start time (ms, blank = 0)</label>
+          <input type="number" id="startTime" placeholder="0">
+        </div>
+        <div class="field">
+          <label>End time (ms, blank = record end)</label>
+          <input type="number" id="endTime" placeholder="record end">
+        </div>
+      </div>
+    </div>
     <label class="toggle">
       <input type="checkbox" id="sortToggle">
       Sort output by this key (default keeps input order)
@@ -150,6 +163,8 @@
   var minKey = document.getElementById('minKey');
   var maxKey = document.getElementById('maxKey');
   var sortToggle = document.getElementById('sortToggle');
+  var startTime = document.getElementById('startTime');
+  var endTime = document.getElementById('endTime');
   var cutBtn = document.getElementById('cutBtn');
   var downloadLink = document.getElementById('downloadLink');
   var keyRangeHint = document.getElementById('keyRangeHint');
@@ -290,6 +305,7 @@
       ['Format', 'code ' + meta.fmtCode + ' (' + SAMPLE_BYTES[meta.fmtCode] + ' B/sample)'],
       ['Sample interval', meta.dtUs + ' \u00b5s'],
       ['Samples per trace', fmt(meta.ns)],
+      ['Record length', (meta.ns - 1) * meta.dtUs / 1000 + ' ms'],
       ['Extended text headers', meta.extText],
       ['Traces', fmt(meta.traces)],
     ];
@@ -362,8 +378,13 @@
     var keyOffset = parseInt(keySelect.value, 10);
     var minVal = minKey.value === '' ? null : Math.floor(Number(minKey.value));
     var maxVal = maxKey.value === '' ? null : Math.floor(Number(maxKey.value));
+    var tStart = startTime.value === '' ? null : Number(startTime.value);
+    var tEnd = endTime.value === '' ? null : Number(endTime.value);
     if (minKey.value !== '' && !Number.isFinite(minVal)) { say('Invalid min value', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (maxKey.value !== '' && !Number.isFinite(maxVal)) { say('Invalid max value', 'err'); busy = false; cutBtn.disabled = false; return; }
+    if (tStart !== null && (!Number.isFinite(tStart) || tStart < 0)) { say('Invalid start time', 'err'); busy = false; cutBtn.disabled = false; return; }
+    if (tEnd !== null && (!Number.isFinite(tEnd) || tEnd < 0)) { say('Invalid end time', 'err'); busy = false; cutBtn.disabled = false; return; }
+    var timeCut = computeTimeCut(tStart, tEnd);
     try {
       say('Scanning trace headers ...');
       var sel = await scanHeaders(minVal, maxVal, function (done, total) {
@@ -377,8 +398,9 @@
         var keys = sel.selKey;
         order.sort(function (a, b) { return keys[a] - keys[b] || a - b; });
       }
+      if (timeCut.applied) say('Time cut: ' + timeCut.startMs + ' - ' + timeCut.endMs + ' ms (' + timeCut.nsOut + ' samples)');
       say('Writing output (' + fmt(sel.count) + ' traces) ...');
-      resultBlob = await writeOutput(sel, order, function (done, total) {
+      resultBlob = await writeOutput(sel, order, timeCut, function (done, total) {
         setProgress(cutProgress, cutBar, done / total);
       });
       var base = meta.name.replace(/\.sgy$/i, '').replace(/\.segy$/i, '');
@@ -398,13 +420,43 @@
     }
   });
 
-  async function writeOutput(sel, order, onProgress) {
+  function computeTimeCut(tStart, tEnd) {
+    var bytes = SAMPLE_BYTES[meta.fmtCode];
+    var dtUs = meta.dtUs;
+    var ns = meta.ns;
+    var startSample = tStart === null ? 0 : Math.round(tStart * 1000 / dtUs);
+    var endSample = tEnd === null ? ns - 1 : Math.round(tEnd * 1000 / dtUs);
+    startSample = Math.max(0, Math.min(startSample, ns - 1));
+    endSample = Math.max(0, Math.min(endSample, ns - 1));
+    if (startSample > endSample) throw new Error('Start time is beyond the end of the record');
+    var nsOut = endSample - startSample + 1;
+    var startMs = Math.round(startSample * dtUs / 1000);
+    var endMs = Math.round(endSample * dtUs / 1000);
+    return {
+      applied: nsOut !== ns || startSample !== 0,
+      startSample: startSample,
+      endSample: endSample,
+      nsOut: nsOut,
+      startMs: startMs,
+      endMs: endMs,
+      strideOut: 240 + nsOut * bytes,
+    };
+  }
+
+  async function writeOutput(sel, order, timeCut, onProgress) {
     var stride = meta.stride;
+    var strideOut = timeCut.strideOut;
+    var nsOut = timeCut.nsOut;
+    var startSample = timeCut.startSample;
+    var bytes = SAMPLE_BYTES[meta.fmtCode];
+    var delayMs = timeCut.startMs;
     var count = sel.count;
     var parts = [];
     var head = await currentFile.slice(0, 3600).arrayBuffer();
     var dv = new DataView(head);
     dv.setInt16(3212, count > 65535 ? 65535 : count, meta.le);
+    dv.setInt16(3220, nsOut > 65535 ? 65535 : nsOut, meta.le);
+    dv.setInt32(3468, nsOut, meta.le);
     parts.push(new Blob([head], { type: 'application/octet-stream' }));
     if (meta.dataStart > 3600) parts.push(currentFile.slice(3600, meta.dataStart));
     var outBuf = new Uint8Array(OUT_BYTES);
@@ -441,9 +493,15 @@
       var chunk = await sourceChunk(chunkIndex);
       var off = srcPos - chunkIndex * srcChunkBytes;
       var room = OUT_BYTES - outPos;
-      if (room < stride) flush();
-      for (var b = 0; b < stride; b++) outBuf[outPos + b] = chunk.getUint8(off + b);
-      outPos += stride;
+      if (room < strideOut) flush();
+      for (var h = 0; h < 240; h++) outBuf[outPos + h] = chunk.getUint8(off + h);
+      var hdr = new DataView(outBuf.buffer, outBuf.byteOffset + outPos, 240);
+      hdr.setInt16(108, delayMs, meta.le);
+      hdr.setInt16(114, nsOut, meta.le);
+      hdr.setInt16(116, meta.dtUs, meta.le);
+      var srcSamples = off + 240 + startSample * bytes;
+      for (var s = 0; s < nsOut * bytes; s++) outBuf[outPos + 240 + s] = chunk.getUint8(srcSamples + s);
+      outPos += strideOut;
       if ((j & 4095) === 0) {
         if (onProgress) onProgress(j + 1, count);
         await yieldToUi();

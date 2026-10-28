@@ -34,6 +34,7 @@ def init_db():
             inline_min INTEGER, inline_max INTEGER,
             xline_min INTEGER, xline_max INTEGER,
             chan_min INTEGER, chan_max INTEGER,
+            start_time_ms REAL DEFAULT 0,
             is_processed INTEGER DEFAULT 0,
             source_file_id TEXT,
             processing_desc TEXT,
@@ -53,6 +54,10 @@ def init_db():
         conn.execute("ALTER TABLE files ADD COLUMN chan_max INTEGER")
     except sqlite3.OperationalError:
         pass
+    try:
+        conn.execute("ALTER TABLE files ADD COLUMN start_time_ms REAL DEFAULT 0")
+    except sqlite3.OperationalError:
+        pass
     conn.commit()
     conn.close()
 
@@ -68,9 +73,9 @@ def save_file_meta(file_id: str, meta: Dict[str, Any]) -> bool:
                 ffid_min, ffid_max, shot_min, shot_max,
                 cdp_min, cdp_max, offset_min, offset_max,
                 inline_min, inline_max, xline_min, xline_max,
-                chan_min, chan_max,
+                chan_min, chan_max, start_time_ms,
                 is_processed, source_file_id, processing_desc, file_hash, created_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
             file_id, meta.get('file_name', ''), meta.get('file_path', ''), meta.get('file_size', 0),
             meta.get('trace_count', 0), meta.get('samples_per_trace', 0), meta.get('sample_rate', 0.0),
@@ -82,6 +87,7 @@ def save_file_meta(file_id: str, meta: Dict[str, Any]) -> bool:
             meta.get('inline_min', 0), meta.get('inline_max', 0),
             meta.get('xline_min', 0), meta.get('xline_max', 0),
             meta.get('chan_min', 0), meta.get('chan_max', 0),
+            meta.get('start_time_ms', 0.0),
             1 if meta.get('is_processed', False) else 0,
             meta.get('source_file_id'),
             meta.get('processing_desc'),

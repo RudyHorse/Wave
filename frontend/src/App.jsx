@@ -1020,7 +1020,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                           onChange={(e) => handleSampleChange(Number(e.target.value))}
                           style={{ flex: 1 }} />
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)', minWidth: '110px', textAlign: 'right' }}>
-                          {selectedSample} ({Math.round(selectedSample * (statistics?.sample_rate || 0))} ms)
+                          {selectedSample} ({Math.round((statistics?.start_time_ms || 0) + selectedSample * (statistics?.sample_rate || 0))} ms)
                         </span>
                       </div>
                     ) : null
@@ -1037,7 +1037,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                           value={selectedSample}
                           onChange={(e) => handleSampleChange(e.target.value)} />
                         <span style={{ fontFamily: 'var(--font-mono)', fontSize: '10px', color: 'var(--text-secondary)' }}>
-                          / {maxS - 1} ({Math.round(selectedSample * (statistics?.sample_rate || 0))} ms)
+                          / {maxS - 1} ({Math.round((statistics?.start_time_ms || 0) + selectedSample * (statistics?.sample_rate || 0))} ms)
                         </span>
                       </div>
                     ) : null
@@ -1418,7 +1418,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                   <span className="inline-badge" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>FFID {win.data.ffid_label}</span>
                 )}
                 {sortMode === 'time_slice' && win.data?.selected_sample != null && (
-                  <span className="inline-badge" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>Sample {win.data.selected_sample} ({Math.round(win.data.selected_sample * (win.data.sample_rate || 0))} ms)</span>
+                  <span className="inline-badge" style={{ position: 'absolute', left: '50%', transform: 'translateX(-50%)' }}>Sample {win.data.selected_sample} ({Math.round((win.data.start_time_ms || 0) + win.data.selected_sample * (win.data.sample_rate || 0))} ms)</span>
                 )}
                 <div className="analysis-dropdown-wrapper" style={{ marginLeft: 'auto' }}>
                   <button

@@ -316,7 +316,7 @@ class SGYHandler:
     def _effective_start_time(self, f, from_processed: bool) -> float:
         if from_processed:
             return float(f.get('processed_start') or 0.0)
-        return 0.0
+        return float(f.get('start_time_ms') or 0.0)
 
     def load_file(self, file_path: str, file_name: str, trace_len: Optional[int] = None, sample_rate: Optional[float] = None, dedup: bool = True, persist: bool = True) -> str:
         file_id = str(uuid.uuid4())
@@ -506,6 +506,7 @@ class SGYHandler:
                     'file_hash': file_hash,
                     'chan_min': chan_min,
                     'chan_max': chan_max,
+                    'start_time_ms': 0.0,
                     'chan_arr': chan_arr,
                     'ffid_chan_sort_indices': ffid_chan_sort_indices,
                     'ffid_chan_sorted': ffid_chan_sorted,
@@ -538,6 +539,7 @@ class SGYHandler:
             'trace_count': f['trace_count'],
             'samples_per_trace': f['samples_per_trace'],
             'sample_rate': f['sample_rate'],
+            'start_time_ms': float(f.get('start_time_ms') or 0.0),
             'min_amplitude': f['min_amplitude'],
             'max_amplitude': f['max_amplitude'],
             'ffid_min': f['ffid_min'],
@@ -698,6 +700,7 @@ class SGYHandler:
             'sample_step': sample_step,
             'samples_original': num_samples,
             'sample_rate': f['sample_rate'],
+            'start_time_ms': float(f.get('start_time_ms') or 0.0),
             'sort_mode': sort_mode,
         }
         
@@ -2082,6 +2085,7 @@ class SGYHandler:
             'xline_min': meta.get('xline_min', 0), 'xline_max': meta.get('xline_max', 0),
             'data': data,
             'samples': samples,
+            'start_time_ms': meta.get('start_time_ms', 0.0),
             'sort_indices': sort_indices,
             'inline_sorted': inline_sorted,
             'xline_sorted': xline_sorted,
@@ -2339,6 +2343,7 @@ class SGYHandler:
             'trace_count': data.shape[0],
             'samples_per_trace': data.shape[1],
             'sample_rate': self._effective_sample_rate(f, True),
+            'start_time_ms': self._effective_start_time(f, True),
             'min_amplitude': float(data.min()),
             'max_amplitude': float(data.max()),
             'ffid_min': f.get('ffid_min', 0), 'ffid_max': f.get('ffid_max', 0),
@@ -2411,7 +2416,7 @@ class SGYHandler:
             'selected_sample': sample,
             'samples_original': data.shape[1],
             'sample_rate': f['sample_rate'],
-            'start_time_ms': 0.0,
+            'start_time_ms': float(f.get('start_time_ms') or 0.0),
         }
 
 

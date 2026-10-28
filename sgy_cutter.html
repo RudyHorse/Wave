@@ -132,6 +132,29 @@
     </div>
     <div id="keyRangeHint" class="dim" style="font-size:12px; margin:-4px 0 12px;"></div>
     <div class="field">
+      <label>Second sorting key (optional)</label>
+      <select id="key2Select">
+        <option value="">None</option>
+        <option value="8">FFID (byte 9)</option>
+        <option value="12">CHAN (byte 13)</option>
+        <option value="20">CDP (byte 21)</option>
+        <option value="36">Offset (byte 37)</option>
+        <option value="188">Inline (byte 189)</option>
+        <option value="192">Xline (byte 193)</option>
+      </select>
+    </div>
+    <div class="row" id="key2RangeRow" style="display:none">
+      <div class="field">
+        <label>2nd key min (blank = first)</label>
+        <input type="number" id="minKey2" placeholder="no limit">
+      </div>
+      <div class="field">
+        <label>2nd key max (blank = last)</label>
+        <input type="number" id="maxKey2" placeholder="no limit">
+      </div>
+    </div>
+    <div id="key2RangeHint" class="dim" style="font-size:12px; margin:-4px 0 12px; display:none;"></div>
+    <div class="field">
       <label>Trace time cut (optional)</label>
       <div class="row">
         <div class="field">
@@ -150,7 +173,7 @@
     </div>
     <label class="toggle">
       <input type="checkbox" id="sortToggle">
-      Sort output by this key (default keeps input order)
+      Sort output by keys (1st, then 2nd; default keeps input order)
     </label>
     <button class="btn-primary" id="cutBtn" disabled>Cut</button>
     <div class="progress" id="cutProgress"><div class="bar" id="cutBar"></div></div>
@@ -166,6 +189,11 @@
   var keySelect = document.getElementById('keySelect');
   var minKey = document.getElementById('minKey');
   var maxKey = document.getElementById('maxKey');
+  var key2Select = document.getElementById('key2Select');
+  var minKey2 = document.getElementById('minKey2');
+  var maxKey2 = document.getElementById('maxKey2');
+  var key2RangeRow = document.getElementById('key2RangeRow');
+  var key2RangeHint = document.getElementById('key2RangeHint');
   var sortToggle = document.getElementById('sortToggle');
   var startTime = document.getElementById('startTime');
   var endTime = document.getElementById('endTime');
@@ -236,6 +264,7 @@
       showInfo();
       cutBtn.disabled = false;
       updateKeyHint();
+      updateKey2Controls();
       say('Loaded: ' + fmt(meta.traces) + ' traces, ' + meta.ns + ' samples, dt ' + meta.dtUs + ' \u00b5s', 'ok');
     } catch (err) {
       say('Error: ' + err.message, 'err');
@@ -342,15 +371,35 @@
 
   keySelect.addEventListener('change', updateKeyHint);
 
+  function updateKey2Controls() {
+    var has2 = key2Select.value !== '';
+    key2RangeRow.style.display = has2 ? 'flex' : 'none';
+    key2RangeHint.style.display = has2 ? 'block' : 'none';
+    updateKey2Hint();
+  }
+
+  function updateKey2Hint() {
+    var o = key2Select.value;
+    if (o !== '' && meta && meta.keyRanges && meta.keyRanges[o]) {
+      var r = meta.keyRanges[o];
+      key2RangeHint.textContent = '2nd key (' + KEY_OFFSETS[o] + ') range in file: ' + fmt(r[0]) + ' - ' + fmt(r[1]);
+    } else {
+      key2RangeHint.textContent = '';
+    }
+  }
+
+  key2Select.addEventListener('change', updateKey2Controls);
+
   function tracesPerChunk() {
     return Math.max(1, Math.floor(CHUNK_BYTES / meta.stride));
   }
 
-  async function scanHeaders(minVal, maxVal, onProgress) {
+  async function scanHeaders(minVal, maxVal, key2Offset, minVal2, maxVal2, onProgress) {
     var stride = meta.stride;
     var tpc = tracesPerChunk();
     var selIdx = new Int32Array(meta.traces);
     var selKey = new Int32Array(meta.traces);
+    var selKey2 = new Int32Array(meta.traces);
     var count = 0;
     for (var start = 0; start < meta.traces; start += tpc) {
       var n = Math.min(tpc, meta.traces - start);
@@ -362,14 +411,21 @@
         var key = meta.le ? view.getInt32(base + keyOffset, true) : view.getInt32(base + keyOffset, false);
         if (minVal !== null && key < minVal) continue;
         if (maxVal !== null && key > maxVal) continue;
+        var key2 = 0;
+        if (key2Offset !== null) {
+          key2 = meta.le ? view.getInt32(base + key2Offset, true) : view.getInt32(base + key2Offset, false);
+          if (minVal2 !== null && key2 < minVal2) continue;
+          if (maxVal2 !== null && key2 > maxVal2) continue;
+        }
         selIdx[count] = start + i;
         selKey[count] = key;
+        selKey2[count] = key2;
         count++;
       }
       if (onProgress) onProgress(start + n, meta.traces);
       await yieldToUi();
     }
-    return { selIdx: selIdx, selKey: selKey, count: count };
+    return { selIdx: selIdx, selKey: selKey, selKey2: selKey2, count: count };
   }
 
   function yieldToUi() {
@@ -383,11 +439,16 @@
     var keyOffset = parseInt(keySelect.value, 10);
     var minVal = minKey.value === '' ? null : Math.floor(Number(minKey.value));
     var maxVal = maxKey.value === '' ? null : Math.floor(Number(maxKey.value));
+    var key2Offset = key2Select.value === '' ? null : parseInt(key2Select.value, 10);
+    var minVal2 = minKey2.value === '' ? null : Math.floor(Number(minKey2.value));
+    var maxVal2 = maxKey2.value === '' ? null : Math.floor(Number(maxKey2.value));
     var tStart = startTime.value === '' ? null : Number(startTime.value);
     var tEnd = endTime.value === '' ? null : Number(endTime.value);
     var rMs = resampleMs.value === '' ? null : Number(resampleMs.value);
     if (minKey.value !== '' && !Number.isFinite(minVal)) { say('Invalid min value', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (maxKey.value !== '' && !Number.isFinite(maxVal)) { say('Invalid max value', 'err'); busy = false; cutBtn.disabled = false; return; }
+    if (minKey2.value !== '' && !Number.isFinite(minVal2)) { say('Invalid 2nd key min value', 'err'); busy = false; cutBtn.disabled = false; return; }
+    if (maxKey2.value !== '' && !Number.isFinite(maxVal2)) { say('Invalid 2nd key max value', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (tStart !== null && (!Number.isFinite(tStart) || tStart < 0)) { say('Invalid start time', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (tEnd !== null && (!Number.isFinite(tEnd) || tEnd < 0)) { say('Invalid end time', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (rMs !== null && (!Number.isFinite(rMs) || rMs <= 0)) { say('Invalid sample interval', 'err'); busy = false; cutBtn.disabled = false; return; }
@@ -395,16 +456,17 @@
     var resample = computeResample(rMs, timeCut);
     try {
       say('Scanning trace headers ...');
-      var sel = await scanHeaders(minVal, maxVal, function (done, total) {
+      var sel = await scanHeaders(minVal, maxVal, key2Offset, minVal2, maxVal2, function (done, total) {
         setProgress(cutProgress, cutBar, done / total);
       });
       if (sel.count === 0) throw new Error('No traces match the selected key range');
       var order = null;
       if (sortToggle.checked) {
-        say('Sorting ' + fmt(sel.count) + ' traces by key ...');
+        say('Sorting ' + fmt(sel.count) + ' traces by keys ...');
         order = Array.from(sel.selIdx.subarray(0, sel.count));
         var keys = sel.selKey;
-        order.sort(function (a, b) { return keys[a] - keys[b] || a - b; });
+        var keys2 = sel.selKey2;
+        order.sort(function (a, b) { return keys[a] - keys[b] || keys2[a] - keys2[b] || a - b; });
       }
       if (timeCut.applied) say('Time cut: ' + timeCut.startMs + ' - ' + timeCut.endMs + ' ms (' + timeCut.nsOut + ' samples)');
       if (resample) say('Resample: ' + resample.dtUs + ' \u00b5s interval (' + resample.nsOut + ' samples)');
@@ -418,7 +480,7 @@
       downloadLink.href = URL.createObjectURL(resultBlob);
       downloadLink.download = outName;
       downloadLink.style.display = 'block';
-      say('Cut ' + fmt(sel.count) + ' of ' + fmt(meta.traces) + ' traces' + (sortToggle.checked ? ' (sorted by key)' : ' (input order kept)'), 'ok');
+      say('Cut ' + fmt(sel.count) + ' of ' + fmt(meta.traces) + ' traces' + (sortToggle.checked ? ' (sorted by keys)' : ' (input order kept)'), 'ok');
       say('Ready: ' + outName);
     } catch (err) {
       say('Error: ' + err.message, 'err');

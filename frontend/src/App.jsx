@@ -368,13 +368,17 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
       const res = await axios.post(`${API_BASE}/load-from-db`, { file_id: dbFileId })
       const fileId_ = res.data.file_id
       const stats = res.data.statistics
-      const hasInline = !!(stats.inline_min || stats.inline_max)
       let inlineVal = selectedInline
       let crosslineVal = selectedCrossline
       let cdpVal = selectedCdp
       let ffidVal = selectedFfid
+      let hasInline = false
+      try {
+        const sortRes0 = await axios.get(`${API_BASE}/sort-info/${fileId_}`)
+        hasInline = !!sortRes0.data.has_inline_xline
+      } catch (e) {}
+      setHasInlineXline(hasInline)
       if (hasInline) {
-        setHasInlineXline(true)
         try {
           const [inlineRes, crosslineRes] = await Promise.all([
             axios.get(`${API_BASE}/inline-list/${fileId_}`),
@@ -393,6 +397,11 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
             setSelectedCrossline(crosslineVal)
           }
         } catch (e) {}
+      } else {
+        setInlineList([])
+        setCrosslineList([])
+        setSelectedInline(null)
+        setSelectedCrossline(null)
       }
       try {
         const sortRes = await axios.get(`${API_BASE}/sort-info/${fileId_}`)
@@ -580,7 +589,9 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
       const nv = { xrange: [0, visualization.traces], yrange: [0, visualization.samples] }
       syncViewRef.current = nv
       setSyncView(nv)
-      setHasInlineXline(!!(statistics.inline_min || statistics.inline_max))
+      setHasInlineXline(false)
+      setInlineList([])
+      setCrosslineList([])
       setHasCdpOffset(false)
       setCdpList([])
       setSelectedCdp(null)
@@ -592,6 +603,15 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
       setSelectedFfidChan(null)
       try {
         const sortRes = await axios.get(`${API_BASE}/sort-info/${file_id}`)
+        setHasInlineXline(!!sortRes.data.has_inline_xline)
+        if (sortRes.data.has_inline_xline) {
+          const inlineRes = await axios.get(`${API_BASE}/inline-list/${file_id}`)
+          setInlineList(inlineRes.data.inlines || [])
+          if (sortRes.data.has_crossline_xline) {
+            const crosslineRes = await axios.get(`${API_BASE}/crossline-list/${file_id}`)
+            setCrosslineList(crosslineRes.data.crosslines || [])
+          }
+        }
         if (sortRes.data.has_cdp_offset) {
           setHasCdpOffset(true)
           const cdpRes = await axios.get(`${API_BASE}/cdp-list/${file_id}`)
@@ -973,14 +993,15 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                 <div className="subblock-body">
                   <div className="param-row">
                     <span className="param-label">Sort</span>
-                    <select className="param-select" value={sortMode} onChange={(e) => handleSortModeChange(e.target.value)} disabled={!hasInlineXline}>
+                    <select className="param-select" value={sortMode} onChange={(e) => handleSortModeChange(e.target.value)}
+                      disabled={!hasInlineXline && !hasCdpOffset && !hasFfidOffset && !hasFfidChan}>
                       <option value="none">None</option>
-                      <option value="inline_xline">Inline / Xline</option>
-                      <option value="crossline_xline">Xline / Inline</option>
-                      <option value="cdp_offset">CDP / Offset</option>
-                      <option value="ffid_offset">FFID / Offset</option>
-                      <option value="ffid_chan">FFID / Chan</option>
-                      <option value="time_slice">Time Slice</option>
+                      <option value="inline_xline" disabled={!hasInlineXline}>Inline / Xline</option>
+                      <option value="crossline_xline" disabled={!hasInlineXline}>Xline / Inline</option>
+                      <option value="cdp_offset" disabled={!hasCdpOffset}>CDP / Offset</option>
+                      <option value="ffid_offset" disabled={!hasFfidOffset}>FFID / Offset</option>
+                      <option value="ffid_chan" disabled={!hasFfidChan}>FFID / Chan</option>
+                      <option value="time_slice" disabled={!hasInlineXline}>Time Slice</option>
                     </select>
                   </div>
                   {sortMode !== 'time_slice' && sortMode !== 'none' && (

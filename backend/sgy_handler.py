@@ -1267,23 +1267,29 @@ class SGYHandler:
         if t1 is None:
             t1 = cur_end
 
-        requested = (t0, t1)
-        t0 = max(t0, cur_start)
-        t1 = min(t1, cur_end)
+        if not np.isfinite(t0) or not np.isfinite(t1):
+            raise ValueError('Start and end times must be finite')
         if t1 < t0:
-            raise ValueError(f'Requested time range {requested[0]:g}..{requested[1]:g} ms is outside the available {cur_start:g}..{cur_end:g} ms')
+            raise ValueError(f'End time {t1:g} ms must be >= start time {t0:g} ms')
 
+        # The output may extend beyond the recorded time range on either side;
+        # samples outside the record are filled with zero amplitude.
         n_new = int(np.floor((t1 - t0) / dt + 1e-9)) + 1
         times = t0 + np.arange(n_new, dtype=np.float64) * dt
 
         if abs(dt - cur_dt) < 1e-9 and abs(t0 - cur_start) < 1e-9 and n_new == n_samples:
             result = data.copy()
         else:
-            axis = cur_start + np.arange(n_samples, dtype=np.float64) * cur_dt
-            result = np.empty((n_traces, n_new), dtype=np.float32)
-            for i in range(n_traces):
-                self._check_cancel(file_id)
-                result[i] = np.interp(times, axis, data[i]).astype(np.float32)
+            self._check_cancel(file_id)
+            frac = (times - cur_start) / cur_dt
+            i0 = np.floor(frac).astype(np.int64)
+            w = (frac - i0).astype(np.float64)
+            i0c = np.clip(i0, 0, n_samples - 1)
+            i1c = np.clip(i0c + 1, 0, n_samples - 1)
+            result = (data[:, i0c] * (1.0 - w) + data[:, i1c] * w).astype(np.float32)
+            outside = (times < cur_start - 1e-9) | (times > cur_end + 1e-9)
+            if np.any(outside):
+                result[:, outside] = 0.0
 
         params = {'sample_interval': dt, 'start_time': t0, 'end_time': t1}
         self.files[file_id]['processed'] = {

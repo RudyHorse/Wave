@@ -135,15 +135,15 @@ export default function ModuleParameters({ mod, idx, updateParam, velocityFiles 
                   </div>
                   <div className="module-param">
                     <label className="param-label">Start time (ms)</label>
-                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="1"
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" step="1"
                       value={mod.params.startTime} onChange={(e) => updateParam(idx, 'startTime', e.target.value)} disabled={!mod.enabled}
-                      placeholder="0" />
+                      placeholder="0 (negative pads before record)" />
                   </div>
                   <div className="module-param">
                     <label className="param-label">End time (ms)</label>
-                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" min="0" step="1"
+                    <input className={`param-input ${!mod.enabled ? 'param-disabled' : ''}`} type="number" step="1"
                       value={mod.params.endTime} onChange={(e) => updateParam(idx, 'endTime', e.target.value)} disabled={!mod.enabled}
-                      placeholder="Last time" />
+                      placeholder="Last time (larger pads after record)" />
                   </div>
                 </>
               )}

@@ -55,6 +55,7 @@ function ProcessingPanel({ fileId, onRun, onStop, isRunning, storedFiles }) {
   const addModule = (modDef) => {
     setProcModules(prev => [...prev, {
       id: modDef.id,
+      uid: `${modDef.id}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`,
       title: modDef.title,
       enabled: true,
       paramsOpen: false,
@@ -197,7 +198,7 @@ function ProcessingPanel({ fileId, onRun, onStop, isRunning, storedFiles }) {
 
           {procModules.map((mod, idx) => (
             <Module
-              key={mod.id}
+              key={mod.uid}
               title={mod.title}
               enabled={mod.enabled}
               onToggle={(v) => updateField(idx, 'enabled', v)}
@@ -225,7 +226,7 @@ function ProcessingPanel({ fileId, onRun, onStop, isRunning, storedFiles }) {
                 borderRadius: 'var(--radius)', maxHeight: '200px', overflowY: 'auto',
                 marginTop: '2px', boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
               }}>
-                {sortedAvailableModules.filter(a => !procModules.find(p => p.id === a.id)).map(m => (
+                {sortedAvailableModules.map(m => (
                   <div key={m.id} style={{
                     padding: '6px 10px', cursor: 'pointer', fontSize: '12px', color: 'var(--text-primary)',
                     borderBottom: '1px solid var(--border-color)',

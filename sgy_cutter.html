@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SGY Cutter</title>
+<style>
+  :root {
+    --bg-main: #0a0e14; --bg-surface: #151b24; --bg-elevated: #1e2630;
+    --primary: #00d4aa; --primary-hover: #00f5c4; --secondary: #ff6b35;
+    --text-primary: #e6edf3; --text-secondary: #8b949e; --border: #30363d;
+    --positive: #3fb950; --negative: #f85149; --radius: 6px;
+    --font-ui: "Inter", "Segoe UI", system-ui, sans-serif;
+    --font-mono: "JetBrains Mono", "Consolas", monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg-main); color: var(--text-primary);
+    font-family: var(--font-ui); font-size: 14px;
+  }
+  header {
+    height: 50px; display: flex; align-items: center; gap: 12px;
+    padding: 0 24px; border-bottom: 1px solid var(--border);
+    background: var(--bg-surface);
+  }
+  header h1 { font-size: 18px; font-weight: 600; margin: 0; }
+  header .logo { color: var(--primary); }
+  main {
+    max-width: 980px; margin: 24px auto; padding: 0 16px;
+    display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
+  }
+  @media (max-width: 820px) { main { grid-template-columns: 1fr; } }
+  .card {
+    background: var(--bg-surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 16px;
+  }
+  .card h2 { font-size: 15px; font-weight: 600; margin: 0 0 12px; }
+  .drop {
+    border: 2px dashed var(--border); border-radius: var(--radius);
+    padding: 32px 16px; text-align: center; cursor: pointer;
+    color: var(--text-secondary); transition: border-color .15s, color .15s;
+  }
+  .drop:hover, .drop.drag { border-color: var(--primary); color: var(--primary); }
+  .info {
+    margin-top: 12px; font-family: var(--font-mono); font-size: 12px;
+    display: grid; grid-template-columns: auto 1fr; gap: 4px 12px;
+  }
+  .info span:nth-child(odd) { color: var(--text-secondary); }
+  .field { margin-bottom: 12px; }
+  .field label { display: block; font-size: 12px; color: var(--text-secondary); margin-bottom: 4px; }
+  select, input[type=number], input[type=text] {
+    width: 100%; background: var(--bg-elevated); color: var(--text-primary);
+    border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 7px 10px; font-size: 13px; font-family: var(--font-ui);
+  }
+  select:focus, input:focus { outline: none; border-color: var(--primary); }
+  .row { display: flex; gap: 8px; }
+  .row .field { flex: 1; }
+  button {
+    border: none; border-radius: var(--radius); padding: 10px 16px;
+    font-size: 13px; font-weight: 600; cursor: pointer;
+    font-family: var(--font-ui);
+  }
+  .btn-primary { background: var(--primary); color: #062a23; width: 100%; }
+  .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  a.btn-download {
+    display: block; text-align: center; text-decoration: none;
+    background: var(--secondary); color: #2b1206; padding: 10px 16px;
+    border-radius: var(--radius); font-weight: 600; margin-top: 8px;
+  }
+  .toggle {
+    display: flex; align-items: center; gap: 8px; font-size: 13px;
+    margin: 8px 0; color: var(--text-secondary); cursor: pointer;
+  }
+  .toggle input { accent-color: var(--primary); }
+  .log {
+    margin-top: 12px; padding: 12px; border-radius: var(--radius);
+    background: var(--bg-elevated); font-family: var(--font-mono);
+    font-size: 12px; white-space: pre-wrap; word-break: break-word;
+    min-height: 60px; max-height: 340px; overflow-y: auto;
+  }
+  .ok { color: var(--positive); }
+  .err { color: var(--negative); }
+  .dim { color: var(--text-secondary); }
+</style>
+</head>
+<body>
+<header>
+  <span class="logo">&#9776;&#9776;</span>
+  <h1>SGY Cutter</h1>
+  <span class="dim">cut SEG-Y by first sorting key range &middot; local file, no upload</span>
+</header>
+<main>
+  <div class="card">
+    <h2>1. Source SEG-Y</h2>
+    <div class="drop" id="drop">
+      Drag &amp; drop a .sgy / .segy file here<br>
+      <span class="dim" style="font-size:12px">or click to browse</span>
+    </div>
+    <input type="file" id="fileInput" accept=".sgy,.segy" style="display:none">
+    <div class="info" id="fileInfo"></div>
+  </div>
+  <div class="card">
+    <h2>2. Cut parameters</h2>
+    <div class="field">
+      <label>First sorting key</label>
+      <select id="keySelect">
+        <option value="8">FFID (byte 9)</option>
+        <option value="12">CHAN (byte 13)</option>
+        <option value="20">CDP (byte 21)</option>
+        <option value="36">Offset (byte 37)</option>
+        <option value="188">Inline (byte 189)</option>
+        <option value="192">Xline (byte 193)</option>
+      </select>
+    </div>
+    <div class="row">
+      <div class="field">
+        <label>Min (blank = first)</label>
+        <input type="number" id="minKey" placeholder="no limit">
+      </div>
+      <div class="field">
+        <label>Max (blank = last)</label>
+        <input type="number" id="maxKey" placeholder="no limit">
+      </div>
+    </div>
+    <label class="toggle">
+      <input type="checkbox" id="sortToggle">
+      Sort output by this key (default keeps input order)
+    </label>
+    <button class="btn-primary" id="cutBtn" disabled>Cut</button>
+    <a class="btn-download" id="downloadLink" style="display:none">Download cut .sgy</a>
+    <div class="log" id="log"></div>
+  </div>
+</main>
+<script>
+(function () {
+  var drop = document.getElementById('drop');
+  var fileInput = document.getElementById('fileInput');
+  var fileInfo = document.getElementById('fileInfo');
+  var keySelect = document.getElementById('keySelect');
+  var minKey = document.getElementById('minKey');
+  var maxKey = document.getElementById('maxKey');
+  var sortToggle = document.getElementById('sortToggle');
+  var cutBtn = document.getElementById('cutBtn');
+  var downloadLink = document.getElementById('downloadLink');
+  var log = document.getElementById('log');
+
+  var buffer = null;
+  var meta = null;
+  var resultBlob = null;
+
+  var SAMPLE_BYTES = {1:4, 2:4, 3:2, 4:4, 5:4, 6:8, 7:3, 8:1};
+
+  function fmt(n) { return n.toLocaleString('en-US'); }
+
+  function say(msg, cls) {
+    var line = document.createElement('div');
+    if (cls) line.className = cls;
+    line.textContent = msg;
+    log.appendChild(line);
+    log.scrollTop = log.scrollHeight;
+  }
+
+  drop.addEventListener('click', function () { fileInput.click(); });
+  fileInput.addEventListener('change', function () {
+    if (fileInput.files && fileInput.files.length) loadFile(fileInput.files[0]);
+  });
+  ['dragenter', 'dragover'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.add('drag'); });
+  });
+  ['dragleave', 'drop'].forEach(function (ev) {
+    drop.addEventListener(ev, function (e) { e.preventDefault(); drop.classList.remove('drag'); });
+  });
+  drop.addEventListener('drop', function (e) {
+    if (e.dataTransfer.files && e.dataTransfer.files.length) loadFile(e.dataTransfer.files[0]);
+  });
+
+  function loadFile(file) {
+    log.innerHTML = '';
+    var reader = new FileReader();
+    reader.onerror = function () { say('Failed to read file', 'err'); };
+    reader.onload = function () {
+      try {
+        parse(reader.result, file.name);
+      } catch (err) {
+        say('Error: ' + err.message, 'err');
+        buffer = null; meta = null;
+        cutBtn.disabled = true; downloadLink.style.display = 'none';
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+
+  function parse(arrayBuffer, name) {
+    buffer = arrayBuffer;
+    var view = new DataView(buffer);
+    if (buffer.byteLength < 3600) throw new Error('File is too small to be SEG-Y');
+    var le = false;
+    var fmtCode = view.getInt16(3224, false);
+    if (!(fmtCode >= 1 && fmtCode <= 8)) {
+      fmtCode = view.getInt16(3224, true);
+      le = true;
+      if (!(fmtCode >= 1 && fmtCode <= 8)) throw new Error('Unknown SEG-Y format code');
+    }
+    var dtUs = view.getInt16(3216, le);
+    var ns = view.getInt16(3220, le);
+    var extText = view.getInt16(3504, le);
+    if (ns <= 0) ns = view.getInt32(3468, le);
+    if (ns <= 0) throw new Error('Invalid samples per trace');
+    if (dtUs <= 0) throw new Error('Invalid sample interval');
+    var bytes = SAMPLE_BYTES[fmtCode];
+    if (!bytes) throw new Error('Unsupported sample format ' + fmtCode);
+    var dataStart = 3600 + 3200 * extText;
+    if (buffer.byteLength < dataStart + 240 + ns * bytes) throw new Error('File is shorter than its header declares');
+    var stride = 240 + ns * bytes;
+    var available = buffer.byteLength - dataStart;
+    var traces = Math.floor(available / stride);
+    var remainder = available % stride;
+    meta = {
+      name: name, le: le, fmtCode: fmtCode, dtUs: dtUs, ns: ns,
+      extText: extText, dataStart: dataStart, stride: stride, traces: traces,
+    };
+    if (remainder !== 0) say('Warning: ' + remainder + ' trailing bytes do not match the trace stride', 'dim');
+    fileInfo.innerHTML = '';
+    var rows = [
+      ['File', name],
+      ['Endianness', le ? 'little' : 'big'],
+      ['Format', 'code ' + fmtCode + ' (' + bytes + ' B/sample)'],
+      ['Sample interval', dtUs + ' \u00b5s'],
+      ['Samples per trace', fmt(ns)],
+      ['Extended text headers', extText],
+      ['Traces', fmt(traces)],
+    ];
+    rows.forEach(function (r) {
+      var k = document.createElement('span'); k.textContent = r[0];
+      var v = document.createElement('span'); v.textContent = r[1];
+      fileInfo.appendChild(k); fileInfo.appendChild(v);
+    });
+    cutBtn.disabled = false;
+    resultBlob = null; downloadLink.style.display = 'none';
+    say('Loaded ' + name + ': ' + fmt(traces) + ' traces, ' + ns + ' samples, dt ' + dtUs + ' \u00b5s');
+  }
+
+  cutBtn.addEventListener('click', function () {
+    try { cut(); } catch (err) { say('Error: ' + err.message, 'err'); }
+  });
+
+  function cut() {
+    if (!buffer || !meta) throw new Error('No file loaded');
+    var keyOffset = parseInt(keySelect.value, 10);
+    var minVal = minKey.value === '' ? null : Math.floor(Number(minKey.value));
+    var maxVal = maxKey.value === '' ? null : Math.floor(Number(maxKey.value));
+    if (minKey.value !== '' && !Number.isFinite(minVal)) throw new Error('Invalid min value');
+    if (maxKey.value !== '' && !Number.isFinite(maxVal)) throw new Error('Invalid max value');
+    var view = new DataView(buffer);
+    var selected = [];
+    for (var i = 0; i < meta.traces; i++) {
+      var off = meta.dataStart + i * meta.stride + keyOffset;
+      var key = meta.le ? view.getInt32(off, true) : view.getInt32(off, false);
+      if (minVal !== null && key < minVal) continue;
+      if (maxVal !== null && key > maxVal) continue;
+      selected.push({ idx: i, key: key });
+    }
+    if (selected.length === 0) throw new Error('No traces match the selected key range');
+    if (sortToggle.checked) {
+      selected.sort(function (a, b) { return a.key - b.key || a.idx - b.idx; });
+    }
+    var out = new Uint8Array(meta.dataStart + selected.length * meta.stride);
+    out.set(new Uint8Array(buffer, 0, meta.dataStart), 0);
+    var dv = new DataView(out.buffer);
+    dv.setInt16(3212, selected.length > 65535 ? 65535 : selected.length, meta.le);
+    for (var j = 0; j < selected.length; j++) {
+      var src = meta.dataStart + selected[j].idx * meta.stride;
+      out.set(new Uint8Array(buffer, src, meta.stride), meta.dataStart + j * meta.stride);
+    }
+    var base = meta.name.replace(/\.sgy$/i, '').replace(/\.segy$/i, '');
+    var outName = base + '_cut.sgy';
+    resultBlob = new Blob([out], { type: 'application/octet-stream' });
+    if (downloadLink.href) URL.revokeObjectURL(downloadLink.href);
+    downloadLink.href = URL.createObjectURL(resultBlob);
+    downloadLink.download = outName;
+    downloadLink.style.display = 'block';
+    var keySpan = sortToggle.checked
+      ? ' (sorted by key)'
+      : ' (input order kept)';
+    say('Cut ' + fmt(selected.length) + ' of ' + fmt(meta.traces) + ' traces' + keySpan, 'ok');
+    say('Ready: ' + outName);
+  }
+})();
+</script>
+</body>
+</html>

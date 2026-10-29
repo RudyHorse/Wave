@@ -2044,7 +2044,6 @@ class SGYHandler:
                 mm = np.memmap(fp, dtype='uint8', mode='r')
                 chan_arr = np.ndarray(tc, dtype='>i4', buffer=mm, offset=3612, strides=(ts,)).astype(np.int32)
                 del mm
-                save_ffid_chan(db_file_id, ffid_arr, chan_arr)
             except Exception:
                 pass
         samples = np.arange(data.shape[1])

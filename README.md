@@ -2,6 +2,14 @@
 
 Local seismic processing and QC app for SEG-Y data: load, sort, process, stack and export.
 
+## About
+
+Wave is a lightweight, local-first seismic processing workbench for SEG-Y gathers and lines. It grew out of a simple viewer and now covers the common land-processing chain: importing data from disk (DSIN) or upload, sorting and cropping by header keys, amplitude and frequency processing (AGC, bandpass, deconvolution, phase and gain corrections), ground-roll and noise suppression (LFAF family, f-k filtering, envelope and median-based suppressors), velocity picking with semblance, NMO correction and CMP stacking with fold control, and exporting back to SEG-Y (DSOUT) or the built-in SQLite database.
+
+Everything runs on your machine — the FastAPI backend stores datasets and velocity files in a local SQLite database, the React/Plotly frontend provides heatmap/wiggle visualization, sort views and inline analysis (spectrum, FX, autocorrelation, signal/noise), and a standalone `sgy_cutter.html` file allows cutting SEG-Y volumes without starting the app at all.
+
+Wave is an independent implementation and does not claim bit-for-bit compatibility with any commercial seismic package. Vendor-derived algorithms included here (LFAFN, SUPPRES, AMPSCAL) are manual-based independent implementations, included with their respective licenses.
+
 ## Quick start (Windows)
 
 Double-click `start_app.bat` (or run manually):

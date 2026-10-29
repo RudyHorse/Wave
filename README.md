@@ -1,59 +1,43 @@
-# SeisViz - Seismic Data Visualization
+# Wave
 
-Web application for visualizing and analyzing SEG-Y seismic data files.
+Local seismic processing and QC app for SEG-Y data: load, sort, process, stack and export.
 
-## Quick Start
+## Quick start (Windows)
 
-### 1. Install Backend Dependencies
+Double-click `start_app.bat` (or run manually):
+
 ```powershell
+# backend  -> http://localhost:8010
 cd backend
 pip install -r requirements.txt
-```
+python -m uvicorn main:app --reload --port 8010
 
-### 2. Install Frontend Dependencies
-```powershell
+# frontend -> http://localhost:5173
 cd frontend
 npm install
-```
-
-### 3. Run the Application
-
-**Terminal 1 (Backend):**
-```powershell
-cd backend
-uvicorn main:app --reload --port 8010
-```
-
-**Terminal 2 (Frontend):**
-```powershell
-cd frontend
 npm run dev
 ```
 
-### 4. Open Browser
-Navigate to `http://localhost:5173`
+Open http://localhost:5173
 
-## Features
+## Processing modules
 
-- **File Upload**: Drag & drop or click to upload .sgy/.segy files
-- **Statistics Analysis**: View trace count, sample rate, amplitude statistics
-- **Visualization**: Render seismic data as a color-coded image
+- **Input/Output**: DSIN (load from disk, trace-length and sample-rate control), DSOUT (export SEG-Y), Input sort with two-key ranges, Resample (interval / start / end, zero-padded extension), Output (save to database)
+- **Signal**: AGC, Bandpass, FX-Decon, FX-Decon-T, DeconS, PSF, GAIN
+- **Noise suppression**: LFAF, LFAF-1, LFAFN (f-k velocity filter), SUPPRES (band-limited envelope suppression), AMPSCAL (lateral amplitude median)
+- **Velocity / CMP**: velocity picking with semblance, NMO (stretch mute), CMP STACK (mean/sum/median/trimmed, fold QC), SEG-Y export
 
-## Project Structure
+## Display
 
-```
-seis/
-├── backend/
-│   ├── main.py           # FastAPI application
-│   ├── sgy_handler.py   # SGY file processing
-│   └── requirements.txt
-├── frontend/
-│   ├── src/
-│   │   ├── components/
-│   │   ├── App.jsx
-│   │   ├── App.css
-│   │   └── main.jsx
-│   ├── package.json
-│   └── vite.config.js
-└── SPEC.md
-```
+- Heatmap, wiggle and heatmap+wiggle modes
+- Sort views: Inline/Xline, CDP/Offset, FFID/Offset, FFID/Chan, time slice
+- Time axis in ms, zoom/pan sync, spectrum / FX / autocorrelation / S/N analysis on selection
+
+## Data
+
+- SEG-Y upload and per-project SQLite storage (metadata + velocity files)
+- `sgy_cutter.html` — standalone browser tool: cut SEG-Y by first/second header key ranges, time cut and resampling, no server needed
+
+## Stack
+
+FastAPI + NumPy/SciPy/segyio (Python) · React + Vite + Plotly (frontend)

@@ -82,7 +82,10 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
   const TABS_VISIBLE = 10
   const [storedFiles, setStoredFiles] = useState([])
   const [fbPicksList, setFbPicksList] = useState([])
-  const [fbPicksOverlay, setFbPicksOverlay] = useState(null)
+  const [selectedFbpickId, setSelectedFbpickId] = useState('')
+  const [fbpicksVisible, setFbpicksVisible] = useState(false)
+  const [fbPicksData, setFbPicksData] = useState(null)
+  const [fbpickOpen, setFbpickOpen] = useState(false)
   const [dbTab, setDbTab] = useState('seismic')
 
   const diffData = useMemo(() => {
@@ -607,16 +610,18 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
     }
   }
 
-  const handleFbpickShow = async (fbpickId) => {
+  const handleFbpickSelect = async (fbpickId) => {
+    setSelectedFbpickId(fbpickId)
+    setFbPicksData(null)
+    setFbpicksVisible(false)
+    if (!fbpickId) return
     if (!fileId) {
       setError('Load a seismic file first (fbpicks are matched by FFID and CHAN)')
       return
     }
     try {
       const res = await axios.post(`${API_BASE}/fbpicks/match/${fileId}`, { fbpick_id: fbpickId })
-      setFbPicksOverlay({ fileId, fbpickId, picksByTrace: res.data.picks_by_trace || {} })
-      setSuccessMessage(`Matched ${res.data.matched_picks.toLocaleString('en-US')} of ${res.data.total_picks.toLocaleString('en-US')} picks`)
-      setTimeout(() => setSuccessMessage(null), 3000)
+      setFbPicksData({ fileId, picksByTrace: res.data.picks_by_trace || {}, matched: res.data.matched_picks, total: res.data.total_picks })
     } catch (err) {
       setError(err.response?.data?.detail || 'Failed to match fbpicks')
     }
@@ -625,7 +630,11 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
   const handleFbpickRemove = async (fbpickId) => {
     try {
       await axios.delete(`${API_BASE}/fbpicks/${fbpickId}`)
-      if (fbPicksOverlay?.fbpickId === fbpickId) setFbPicksOverlay(null)
+      if (selectedFbpickId === fbpickId) {
+        setSelectedFbpickId('')
+        setFbPicksData(null)
+        setFbpicksVisible(false)
+      }
       fetchFbPicks()
     } catch (e) {
       setError('Failed to remove fbpick file')
@@ -856,6 +865,18 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
     fetchStoredFiles()
     fetchFbPicks()
   }, [])
+
+  useEffect(() => {
+    if (!selectedFbpickId || !fileId) return
+    let cancelled = false
+    axios.post(`${API_BASE}/fbpicks/match/${fileId}`, { fbpick_id: selectedFbpickId })
+      .then(res => {
+        if (cancelled) return
+        setFbPicksData({ fileId, picksByTrace: res.data.picks_by_trace || {}, matched: res.data.matched_picks, total: res.data.total_picks })
+      })
+      .catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedFbpickId, fileId])
 
   useEffect(() => {
     const onKeyDown = (e) => {
@@ -1418,6 +1439,36 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                 )}
               </div>
               <div className="subblock">
+                <div className="subblock-header" onClick={() => setFbpickOpen(!fbpickOpen)}>
+                  <span className={`collapse-icon ${fbpickOpen ? '' : 'collapsed'}`}>&#9660;</span>
+                  <span className="subblock-title">FBPick</span>
+                </div>
+                {fbpickOpen && (
+                <div className="subblock-body">
+                  <div className="param-row">
+                    <span className="param-label">Pick file</span>
+                    <select className="param-select" value={selectedFbpickId} onChange={(e) => handleFbpickSelect(e.target.value)}>
+                      <option value="">-- None --</option>
+                      {fbPicksList.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    </select>
+                  </div>
+                  <label className="toggle-row" style={{ fontSize: '12px' }}>
+                    <span>Show picks</span>
+                    <label className="toggle-switch">
+                      <input type="checkbox" checked={fbpicksVisible} onChange={(e) => setFbpicksVisible(e.target.checked)} disabled={!fbPicksData} />
+                      <span className="toggle-slider"></span>
+                    </label>
+                  </label>
+                  {fbPicksData && (
+                    <div className="dim" style={{ fontSize: '10px' }}>
+                      {fbPicksData.matched?.toLocaleString('en-US')} of {fbPicksData.total?.toLocaleString('en-US')} picks matched
+                    </div>
+                  )}
+                  {selectedFbpickId && !fbPicksData && <div className="dim" style={{ fontSize: '10px' }}>Matching picks...</div>}
+                </div>
+                )}
+              </div>
+              <div className="subblock">
                 <div className="subblock-header" onClick={() => setPaletteOpen(!paletteOpen)}>
                   <span className={`collapse-icon ${paletteOpen ? '' : 'collapsed'}`}>&#9660;</span>
                   <span className="subblock-title">Palette</span>
@@ -1536,7 +1587,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                 showColorbar={showColorbar}
                 sortMode={sortMode}
                 displayMode={displayMode}
-                fbPicks={win.fileId === fbPicksOverlay?.fileId ? fbPicksOverlay.picksByTrace : null}
+                fbPicks={fbpicksVisible && fbPicksData && win.fileId === fbPicksData.fileId ? fbPicksData.picksByTrace : null}
               />
             </div>
           ))}
@@ -1650,6 +1701,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                       Upload fbpick CSV
                       <input type="file" accept=".csv,.txt" style={{ display: 'none' }} onChange={handleFbpickUpload} />
                     </label>
+                    <div className="dim" style={{ fontSize: '10px', marginBottom: '8px' }}>Visualize picks in Display &rarr; FBPick</div>
                     {fbPicksList.length === 0 ? (
                       <div className="db-empty">No fbpick files in database</div>
                     ) : (
@@ -1658,7 +1710,6 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                           <div className="db-file-header">
                             <span className="db-file-name">{p.name}</span>
                             <div className="db-file-actions">
-                              <button className="btn" style={{ fontSize: '10px', padding: '2px 6px' }} onClick={() => handleFbpickShow(p.id)}>Show</button>
                               <button className="btn btn-danger" style={{ fontSize: '10px', padding: '2px 6px' }} onClick={() => handleFbpickRemove(p.id)}>Remove</button>
                             </div>
                           </div>
@@ -1668,8 +1719,8 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                               <span className="db-stat-val">{p.pick_count?.toLocaleString('en-US')}</span>
                             </div>
                             <div className="db-stat-item">
-                              <span className="db-stat-label">Status</span>
-                              <span className="db-stat-val db-mono">{fbPicksOverlay?.fbpickId === p.id ? 'shown' : '—'}</span>
+                              <span className="db-stat-label">Selected</span>
+                              <span className="db-stat-val db-mono">{selectedFbpickId === p.id ? 'yes' : '—'}</span>
                             </div>
                           </div>
                         </div>

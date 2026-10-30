@@ -63,6 +63,17 @@
   }
   .btn-primary { background: var(--primary); color: #062a23; width: 100%; }
   .btn-primary:hover:not(:disabled) { background: var(--primary-hover); }
+  .btn-small {
+    background: var(--bg-elevated); color: var(--text-primary);
+    border: 1px solid var(--border); padding: 6px 10px;
+    font-size: 12px; width: 100%;
+  }
+  .btn-small:hover { border-color: var(--primary); }
+  .math-rule-row { display: flex; gap: 6px; margin-bottom: 6px; align-items: center; }
+  .math-rule-row select { flex: 1.4; }
+  .math-rule-row select.op { flex: 0.7; }
+  .math-rule-row input { flex: 1; }
+  .math-rule-row button { flex: 0 0 auto; background: var(--bg-elevated); color: var(--negative); border: 1px solid var(--border); border-radius: var(--radius); cursor: pointer; padding: 6px 9px; }
   button:disabled { opacity: .45; cursor: not-allowed; }
   a.btn-download {
     display: block; text-align: center; text-decoration: none;
@@ -116,6 +127,11 @@
         <option value="12">CHAN (byte 13)</option>
         <option value="20">CDP (byte 21)</option>
         <option value="36">Offset (byte 37)</option>
+        <option value="70">Y scalar (byte 71)</option>
+        <option value="72">Source X (byte 73)</option>
+        <option value="76">Source Y (byte 77)</option>
+        <option value="80">Rec X (byte 81)</option>
+        <option value="84">Rec Y (byte 85)</option>
         <option value="188">Inline (byte 189)</option>
         <option value="192">Xline (byte 193)</option>
       </select>
@@ -139,6 +155,11 @@
         <option value="12">CHAN (byte 13)</option>
         <option value="20">CDP (byte 21)</option>
         <option value="36">Offset (byte 37)</option>
+        <option value="70">Y scalar (byte 71)</option>
+        <option value="72">Source X (byte 73)</option>
+        <option value="76">Source Y (byte 77)</option>
+        <option value="80">Rec X (byte 81)</option>
+        <option value="84">Rec Y (byte 85)</option>
         <option value="188">Inline (byte 189)</option>
         <option value="192">Xline (byte 193)</option>
       </select>
@@ -171,6 +192,11 @@
       <label>Resample (optional)</label>
       <input type="number" id="resampleMs" placeholder="new sample interval in ms (blank = keep)" step="0.001" min="0.001">
     </div>
+    <div class="field">
+      <label>Trace header math (optional, applied to saved traces)</label>
+      <div id="mathRules"></div>
+      <button type="button" class="btn-small" id="addMathRule">+ Add math rule</button>
+    </div>
     <label class="toggle">
       <input type="checkbox" id="sortToggle">
       Sort output by keys (1st, then 2nd; default keeps input order)
@@ -198,6 +224,8 @@
   var startTime = document.getElementById('startTime');
   var endTime = document.getElementById('endTime');
   var resampleMs = document.getElementById('resampleMs');
+  var mathRules = document.getElementById('mathRules');
+  var addMathRule = document.getElementById('addMathRule');
   var cutBtn = document.getElementById('cutBtn');
   var downloadLink = document.getElementById('downloadLink');
   var keyRangeHint = document.getElementById('keyRangeHint');
@@ -211,8 +239,97 @@
   var meta = null;
   var resultBlob = null;
   var busy = false;
+  var headerMath = [];
 
-  var KEY_OFFSETS = {8: 'FFID', 12: 'CHAN', 20: 'CDP', 36: 'Offset', 188: 'Inline', 192: 'Xline'};
+  function renderMathRules() {
+    mathRules.innerHTML = '';
+    headerMath.forEach(function (rule, idx) {
+      var row = document.createElement('div');
+      row.className = 'math-rule-row';
+      var sel = document.createElement('select');
+      KEY_ORDER.forEach(function (o) {
+        var opt = document.createElement('option');
+        opt.value = o;
+        opt.textContent = keyLabel(o);
+        if (o === rule.header) opt.selected = true;
+        sel.appendChild(opt);
+      });
+      sel.addEventListener('change', function () { headerMath[idx].header = sel.value; });
+      var op = document.createElement('select');
+      op.className = 'op';
+      [['add', '+'], ['sub', '-'], ['mul', '\u00d7'], ['div', '\u00f7']].forEach(function (p) {
+        var opt = document.createElement('option');
+        opt.value = p[0];
+        opt.textContent = p[1];
+        if (p[0] === rule.op) opt.selected = true;
+        op.appendChild(opt);
+      });
+      op.addEventListener('change', function () { headerMath[idx].op = op.value; });
+      var val = document.createElement('input');
+      val.type = 'number';
+      val.placeholder = 'const';
+      val.value = rule.value;
+      val.addEventListener('input', function () { headerMath[idx].value = val.value; });
+      var rm = document.createElement('button');
+      rm.textContent = '\u00d7';
+      rm.title = 'Remove rule';
+      rm.addEventListener('click', function () {
+        headerMath.splice(idx, 1);
+        renderMathRules();
+      });
+      row.appendChild(sel);
+      row.appendChild(op);
+      row.appendChild(val);
+      row.appendChild(rm);
+      mathRules.appendChild(row);
+    });
+  }
+
+  addMathRule.addEventListener('click', function () {
+    headerMath.push({ header: '8', op: 'add', value: '' });
+    renderMathRules();
+  });
+
+  var KEY_DEFS = {
+    8: { name: 'FFID', size: 4 },
+    12: { name: 'CHAN', size: 4 },
+    20: { name: 'CDP', size: 4 },
+    36: { name: 'Offset', size: 4 },
+    70: { name: 'Y scalar', size: 2 },
+    72: { name: 'Source X', size: 4 },
+    76: { name: 'Source Y', size: 4 },
+    80: { name: 'Rec X', size: 4 },
+    84: { name: 'Rec Y', size: 4 },
+    188: { name: 'Inline', size: 4 },
+    192: { name: 'Xline', size: 4 },
+  };
+  var KEY_ORDER = ['8', '12', '20', '36', '70', '72', '76', '80', '84', '188', '192'];
+
+  function keyLabel(id) {
+    return KEY_DEFS[id].name + ' (byte ' + (parseInt(id, 10) + 1) + ')';
+  }
+
+  function readKeyVal(view, base, id, le) {
+    var def = KEY_DEFS[id];
+    if (def.size === 2) return le ? view.getInt16(base + parseInt(id, 10), true) : view.getInt16(base + parseInt(id, 10), false);
+    return le ? view.getInt32(base + parseInt(id, 10), true) : view.getInt32(base + parseInt(id, 10), false);
+  }
+
+  function writeKeyVal(view, base, id, le, v) {
+    var def = KEY_DEFS[id];
+    var off = base + parseInt(id, 10);
+    if (def.size === 2) {
+      var i2 = Math.round(v);
+      if (i2 < -32768) i2 = -32768;
+      if (i2 > 32767) i2 = 32767;
+      view.setInt16(off, i2, le);
+    } else {
+      var i4 = Math.round(v);
+      if (i4 < -2147483648) i4 = -2147483648;
+      if (i4 > 2147483647) i4 = 2147483647;
+      view.setInt32(off, i4, le);
+    }
+  }
   var SAMPLE_BYTES = {1:4, 2:4, 3:2, 4:4, 5:4, 6:8, 7:3, 8:1};
   var CHUNK_BYTES = 32 * 1024 * 1024;
   var OUT_BYTES = 32 * 1024 * 1024;
@@ -278,16 +395,15 @@
     var stride = meta.stride;
     var tpc = tracesPerChunk();
     var ranges = {};
-    Object.keys(KEY_OFFSETS).forEach(function (o) { ranges[o] = [Infinity, -Infinity]; });
+    KEY_ORDER.forEach(function (o) { ranges[o] = [Infinity, -Infinity]; });
     for (var start = 0; start < meta.traces; start += tpc) {
       var n = Math.min(tpc, meta.traces - start);
       var ab = await currentFile.slice(meta.dataStart + start * stride, meta.dataStart + (start + n) * stride).arrayBuffer();
       var view = new DataView(ab);
       for (var i = 0; i < n; i++) {
         var base = i * stride;
-        Object.keys(KEY_OFFSETS).forEach(function (o) {
-          var off = parseInt(o, 10);
-          var v = meta.le ? view.getInt32(base + off, true) : view.getInt32(base + off, false);
+        KEY_ORDER.forEach(function (o) {
+          var v = readKeyVal(view, base, o, meta.le);
           if (v < ranges[o][0]) ranges[o][0] = v;
           if (v > ranges[o][1]) ranges[o][1] = v;
         });
@@ -345,9 +461,9 @@
     ];
     if (meta.remainder) rows.push(['Warning', fmt(meta.remainder) + ' trailing bytes ignored']);
     if (meta.keyRanges) {
-      Object.keys(KEY_OFFSETS).forEach(function (o) {
+      KEY_ORDER.forEach(function (o) {
         var r = meta.keyRanges[o];
-        rows.push([KEY_OFFSETS[o] + ' range (byte ' + (parseInt(o, 10) + 1) + ')', fmt(r[0]) + ' - ' + fmt(r[1])]);
+        rows.push([keyLabel(o) + ' range', fmt(r[0]) + ' - ' + fmt(r[1])]);
       });
     }
     rows.forEach(function (r) {
@@ -361,7 +477,7 @@
     var o = keySelect.value;
     if (meta && meta.keyRanges && meta.keyRanges[o]) {
       var r = meta.keyRanges[o];
-      keyRangeHint.textContent = KEY_OFFSETS[o] + ' range in file: ' + fmt(r[0]) + ' - ' + fmt(r[1]);
+      keyRangeHint.textContent = KEY_DEFS[o].name + ' range in file: ' + fmt(r[0]) + ' - ' + fmt(r[1]);
     } else if (meta) {
       keyRangeHint.textContent = 'Scanning key-header ranges ...';
     } else {
@@ -382,7 +498,7 @@
     var o = key2Select.value;
     if (o !== '' && meta && meta.keyRanges && meta.keyRanges[o]) {
       var r = meta.keyRanges[o];
-      key2RangeHint.textContent = '2nd key (' + KEY_OFFSETS[o] + ') range in file: ' + fmt(r[0]) + ' - ' + fmt(r[1]);
+      key2RangeHint.textContent = '2nd key (' + KEY_DEFS[o].name + ') range in file: ' + fmt(r[0]) + ' - ' + fmt(r[1]);
     } else {
       key2RangeHint.textContent = '';
     }
@@ -407,13 +523,12 @@
       var view = new DataView(ab);
       for (var i = 0; i < n; i++) {
         var base = i * stride;
-        var keyOffset = parseInt(keySelect.value, 10);
-        var key = meta.le ? view.getInt32(base + keyOffset, true) : view.getInt32(base + keyOffset, false);
+        var key = readKeyVal(view, base, keySelect.value, meta.le);
         if (minVal !== null && key < minVal) continue;
         if (maxVal !== null && key > maxVal) continue;
         var key2 = 0;
         if (key2Offset !== null) {
-          key2 = meta.le ? view.getInt32(base + key2Offset, true) : view.getInt32(base + key2Offset, false);
+          key2 = readKeyVal(view, base, key2Offset, meta.le);
           if (minVal2 !== null && key2 < minVal2) continue;
           if (maxVal2 !== null && key2 > maxVal2) continue;
         }
@@ -452,6 +567,14 @@
     if (tStart !== null && (!Number.isFinite(tStart) || tStart < 0)) { say('Invalid start time', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (tEnd !== null && (!Number.isFinite(tEnd) || tEnd < 0)) { say('Invalid end time', 'err'); busy = false; cutBtn.disabled = false; return; }
     if (rMs !== null && (!Number.isFinite(rMs) || rMs <= 0)) { say('Invalid sample interval', 'err'); busy = false; cutBtn.disabled = false; return; }
+    var mathOps = [];
+    for (var m = 0; m < headerMath.length; m++) {
+      var rule = headerMath[m];
+      var c = Number(rule.value);
+      if (rule.value === '' || !Number.isFinite(c)) { say('Invalid constant in math rule ' + (m + 1), 'err'); busy = false; cutBtn.disabled = false; return; }
+      if (rule.op === 'div' && c === 0) { say('Division by zero in math rule ' + (m + 1), 'err'); busy = false; cutBtn.disabled = false; return; }
+      mathOps.push({ header: rule.header, op: rule.op, value: c });
+    }
     var timeCut = computeTimeCut(tStart, tEnd);
     var resample = computeResample(rMs, timeCut);
     try {
@@ -470,8 +593,9 @@
       }
       if (timeCut.applied) say('Time cut: ' + timeCut.startMs + ' - ' + timeCut.endMs + ' ms (' + timeCut.nsOut + ' samples)');
       if (resample) say('Resample: ' + resample.dtUs + ' \u00b5s interval (' + resample.nsOut + ' samples)');
+      if (mathOps.length) say('Header math: ' + mathOps.length + ' rule(s)');
       say('Writing output (' + fmt(sel.count) + ' traces) ...');
-      resultBlob = await writeOutput(sel, order, timeCut, resample, function (done, total) {
+      resultBlob = await writeOutput(sel, order, timeCut, resample, mathOps, function (done, total) {
         setProgress(cutProgress, cutBar, done / total);
       });
       var base = meta.name.replace(/\.sgy$/i, '').replace(/\.segy$/i, '');
@@ -598,7 +722,7 @@
     }
   }
 
-  async function writeOutput(sel, order, timeCut, resample, onProgress) {
+  async function writeOutput(sel, order, timeCut, resample, mathOps, onProgress) {
     var stride = meta.stride;
     var bytes = SAMPLE_BYTES[meta.fmtCode];
     var fmtCode = meta.fmtCode;
@@ -663,6 +787,16 @@
       hdr.setInt16(108, delayMs, meta.le);
       hdr.setInt16(114, nsOut, meta.le);
       hdr.setInt16(116, outDtUs, meta.le);
+      for (var mr = 0; mr < mathOps.length; mr++) {
+        var rule = mathOps[mr];
+        var cur = readKeyVal(hdr, 0, rule.header, meta.le);
+        var nv;
+        if (rule.op === 'add') nv = cur + rule.value;
+        else if (rule.op === 'sub') nv = cur - rule.value;
+        else if (rule.op === 'mul') nv = cur * rule.value;
+        else nv = cur / rule.value;
+        writeKeyVal(hdr, 0, rule.header, meta.le, nv);
+      }
       var srcSamples = off + 240 + startSample * bytes;
       if (resample) {
         for (var k = 0; k < cutCount; k++) work[k] = readSample(chunk, srcSamples + k * bytes, fmtCode, meta.le);

@@ -1,7 +1,7 @@
 import { memo, useRef } from 'react'
 import Plot from 'react-plotly.js'
 
-const Visualization = memo(function Visualization({ data, isLoading, compact, selectionMode, onSelection, syncView, onViewChange, colorscale, paletteMin, paletteMax, amplitudeScale, showColorbar, sortMode, displayMode }) {
+const Visualization = memo(function Visualization({ data, isLoading, compact, selectionMode, onSelection, syncView, onViewChange, colorscale, paletteMin, paletteMax, amplitudeScale, showColorbar, sortMode, displayMode, fbPicks }) {
   const lastSel = useRef(0)
 
   const renderContent = () => {
@@ -113,6 +113,30 @@ const Visualization = memo(function Visualization({ data, isLoading, compact, se
           showlegend: false,
         })
       }
+    }
+
+    if (fbPicks && !isTimeSlice) {
+      const rate = (data?.sample_rate || 1) * (data?.sample_step || 1)
+      const start = data?.start_time_ms || 0
+      const xs = []
+      const ys = []
+      for (let t = 0; t < data.traces; t++) {
+        const oi = data.trace_indices ? data.trace_indices[t] : t
+        const p = fbPicks[oi]
+        if (p != null && Number.isFinite(p)) {
+          xs.push(t)
+          ys.push((p - start) / rate)
+        }
+      }
+      plotData.push({
+        type: 'scatter',
+        x: xs,
+        y: ys,
+        mode: 'markers',
+        marker: { color: '#ff6b35', size: 6, symbol: 'x' },
+        hoverinfo: 'skip',
+        showlegend: false,
+      })
     }
 
     const emitSelection = (traceStart, traceEnd, sampleStart, sampleEnd) => {

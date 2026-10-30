@@ -58,6 +58,16 @@ def init_db():
         conn.execute("ALTER TABLE files ADD COLUMN start_time_ms REAL DEFAULT 0")
     except sqlite3.OperationalError:
         pass
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS fbpicks (
+            id TEXT PRIMARY KEY,
+            name TEXT NOT NULL,
+            source_file_id TEXT,
+            pick_count INTEGER,
+            payload TEXT NOT NULL,
+            created_at TEXT NOT NULL
+        )
+    """)
     conn.commit()
     conn.close()
 
@@ -141,6 +151,42 @@ def search_files(query: str = '') -> List[Dict[str, Any]]:
         rows = conn.execute("SELECT * FROM files ORDER BY created_at DESC").fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+def save_fbpick(fbpick_id: str, name: str, pick_count: int, payload: str) -> bool:
+    conn = get_conn()
+    try:
+        conn.execute(
+            "INSERT OR REPLACE INTO fbpicks (id, name, source_file_id, pick_count, payload, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (fbpick_id, name, None, pick_count, payload, datetime.now().isoformat()),
+        )
+        conn.commit()
+        return True
+    finally:
+        conn.close()
+
+
+def list_fbpicks() -> List[Dict[str, Any]]:
+    conn = get_conn()
+    rows = conn.execute("SELECT id, name, source_file_id, pick_count, created_at FROM fbpicks ORDER BY created_at DESC").fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_fbpick(fbpick_id: str) -> Optional[Dict[str, Any]]:
+    conn = get_conn()
+    row = conn.execute("SELECT * FROM fbpicks WHERE id = ?", (fbpick_id,)).fetchone()
+    conn.close()
+    return dict(row) if row else None
+
+
+def delete_fbpick(fbpick_id: str) -> bool:
+    conn = get_conn()
+    conn.execute("DELETE FROM fbpicks WHERE id = ?", (fbpick_id,))
+    deleted = conn.total_changes > 0
+    conn.commit()
+    conn.close()
+    return deleted
 
 
 init_db()

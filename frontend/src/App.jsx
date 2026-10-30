@@ -81,6 +81,9 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
   const [numGathers, setNumGathers] = useState(1)
   const TABS_VISIBLE = 10
   const [storedFiles, setStoredFiles] = useState([])
+  const [fbPicksList, setFbPicksList] = useState([])
+  const [fbPicksOverlay, setFbPicksOverlay] = useState(null)
+  const [dbTab, setDbTab] = useState('seismic')
 
   const diffData = useMemo(() => {
     if (numWindows < 2 || !showDifference) return null
@@ -577,6 +580,58 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
     }
   }
 
+  const fetchFbPicks = async () => {
+    try {
+      const res = await axios.get(`${API_BASE}/fbpicks`)
+      setFbPicksList(res.data || [])
+    } catch (e) {
+      console.error('fetchFbPicks error:', e)
+    }
+  }
+
+  const handleFbpickUpload = async (event) => {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await axios.post(`${API_BASE}/fbpicks/upload`, formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      })
+      setSuccessMessage(`Loaded ${res.data.pick_count.toLocaleString('en-US')} picks from ${file.name}`)
+      setTimeout(() => setSuccessMessage(null), 3000)
+      fetchFbPicks()
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to load fbpick file')
+    }
+  }
+
+  const handleFbpickShow = async (fbpickId) => {
+    if (!fileId) {
+      setError('Load a seismic file first (fbpicks are matched by FFID and CHAN)')
+      return
+    }
+    try {
+      const res = await axios.post(`${API_BASE}/fbpicks/match/${fileId}`, { fbpick_id: fbpickId })
+      setFbPicksOverlay({ fileId, fbpickId, picksByTrace: res.data.picks_by_trace || {} })
+      setSuccessMessage(`Matched ${res.data.matched_picks.toLocaleString('en-US')} of ${res.data.total_picks.toLocaleString('en-US')} picks`)
+      setTimeout(() => setSuccessMessage(null), 3000)
+    } catch (err) {
+      setError(err.response?.data?.detail || 'Failed to match fbpicks')
+    }
+  }
+
+  const handleFbpickRemove = async (fbpickId) => {
+    try {
+      await axios.delete(`${API_BASE}/fbpicks/${fbpickId}`)
+      if (fbPicksOverlay?.fbpickId === fbpickId) setFbPicksOverlay(null)
+      fetchFbPicks()
+    } catch (e) {
+      setError('Failed to remove fbpick file')
+    }
+  }
+
   const handleLoadFromDb = async (dbFileId) => {
     try {
       const res = await axios.post(`${API_BASE}/load-from-db`, { file_id: dbFileId })
@@ -799,6 +854,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
 
   useEffect(() => {
     fetchStoredFiles()
+    fetchFbPicks()
   }, [])
 
   useEffect(() => {
@@ -1480,6 +1536,7 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                 showColorbar={showColorbar}
                 sortMode={sortMode}
                 displayMode={displayMode}
+                fbPicks={win.fileId === fbPicksOverlay?.fileId ? fbPicksOverlay.picksByTrace : null}
               />
             </div>
           ))}
@@ -1508,12 +1565,17 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
             <div className="viz-panel">
               <div className="viz-panel-header">
                 <span>Database</span>
+                <div className="db-tabs">
+                  <button className={`db-tab ${dbTab === 'seismic' ? 'active' : ''}`} onClick={() => setDbTab('seismic')}>Seismic</button>
+                  <button className={`db-tab ${dbTab === 'fbpicks' ? 'active' : ''}`} onClick={() => setDbTab('fbpicks')}>FBPicks</button>
+                </div>
               </div>
               <div className="db-panel-body">
-                {storedFiles.length === 0 ? (
-                  <div className="db-empty">No files in database</div>
-                ) : (
-                  storedFiles.map((f) => (
+                {dbTab === 'seismic' && (
+                  storedFiles.length === 0 ? (
+                    <div className="db-empty">No files in database</div>
+                  ) : (
+                    storedFiles.map((f) => (
                     <div key={f.id} className="db-file-entry" style={{ cursor: 'pointer' }} onClick={() => handleLoadFromDb(f.id)}>
                       <div className="db-file-header">
                         <span className="db-file-name">{f.name.replace(/\.sgy$/i, '')}</span>
@@ -1580,6 +1642,40 @@ const [spectrumLoading, setSpectrumLoading] = useState(false)
                       </div>
                     </div>
                   ))
+                  )
+                )}
+                {dbTab === 'fbpicks' && (
+                  <>
+                    <label className="btn btn-secondary" style={{ display: 'block', textAlign: 'center', cursor: 'pointer', marginBottom: '8px', fontSize: '12px' }}>
+                      Upload fbpick CSV
+                      <input type="file" accept=".csv,.txt" style={{ display: 'none' }} onChange={handleFbpickUpload} />
+                    </label>
+                    {fbPicksList.length === 0 ? (
+                      <div className="db-empty">No fbpick files in database</div>
+                    ) : (
+                      fbPicksList.map((p) => (
+                        <div key={p.id} className="db-file-entry">
+                          <div className="db-file-header">
+                            <span className="db-file-name">{p.name}</span>
+                            <div className="db-file-actions">
+                              <button className="btn" style={{ fontSize: '10px', padding: '2px 6px' }} onClick={() => handleFbpickShow(p.id)}>Show</button>
+                              <button className="btn btn-danger" style={{ fontSize: '10px', padding: '2px 6px' }} onClick={() => handleFbpickRemove(p.id)}>Remove</button>
+                            </div>
+                          </div>
+                          <div className="db-file-stats-grid">
+                            <div className="db-stat-item">
+                              <span className="db-stat-label">Picks</span>
+                              <span className="db-stat-val">{p.pick_count?.toLocaleString('en-US')}</span>
+                            </div>
+                            <div className="db-stat-item">
+                              <span className="db-stat-label">Status</span>
+                              <span className="db-stat-val db-mono">{fbPicksOverlay?.fbpickId === p.id ? 'shown' : '—'}</span>
+                            </div>
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </>
                 )}
               </div>
             </div>

@@ -948,6 +948,26 @@ body {
   height: calc(100% - 36px);
   background: var(--bg-surface);
 }
+.db-tabs {
+  display: flex;
+  gap: 6px;
+  margin-left: auto;
+}
+.db-tab {
+  background: var(--bg-elevated);
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius);
+  padding: 3px 10px;
+  font-size: 12px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+.db-tab.active {
+  color: var(--text-primary);
+  border-color: var(--primary);
+  background: rgba(0, 212, 170, 0.12);
+}
 .db-empty {
   color: var(--text-secondary);
   font-size: 13px;

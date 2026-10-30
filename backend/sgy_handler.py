@@ -579,6 +579,7 @@ class SGYHandler:
         
         line_label = None
         line_labels_list = None
+        gathered_indices = None
         
         if sort_mode == 'inline_xline' and f.get('inline_ranges'):
             if inline is None:
@@ -591,9 +592,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['sort_indices'][s:e]])
+                gathered_indices.extend(f['sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['xline_sorted'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -611,9 +614,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['xline_sort_indices'][s:e]])
+                gathered_indices.extend(f['xline_sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['inline_sorted_by_xline'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -633,9 +638,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['cdp_sort_indices'][s:e]])
+                gathered_indices.extend(f['cdp_sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['offset_sorted'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -655,9 +662,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['ffid_sort_indices'][s:e]])
+                gathered_indices.extend(f['ffid_sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['offset_sorted_ffid'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -677,9 +686,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['ffid_chan_sort_indices'][s:e]])
+                gathered_indices.extend(f['ffid_chan_sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['chan_sorted'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -688,7 +699,12 @@ class SGYHandler:
             line_labels_list = gathered_labels[::trace_step]
         else:
             trace_step = max(1, num_traces // max_traces)
-        
+
+        if gathered_indices is not None:
+            trace_indices = np.asarray(gathered_indices, dtype=np.int64)[::trace_step]
+        else:
+            trace_indices = np.arange(data.shape[0], dtype=np.int64)[::trace_step]
+
         data_subset = data[::trace_step, ::sample_step]
         
         result = {
@@ -702,6 +718,7 @@ class SGYHandler:
             'samples_original': num_samples,
             'sample_rate': f['sample_rate'],
             'start_time_ms': float(f.get('start_time_ms') or 0.0),
+            'trace_indices': trace_indices.tolist(),
             'sort_mode': sort_mode,
         }
         
@@ -1601,6 +1618,7 @@ class SGYHandler:
 
         line_label = None
         line_labels_list = None
+        gathered_indices = None
 
         if sort_mode == 'inline_xline' and f.get('inline_ranges'):
             if inline is None:
@@ -1613,9 +1631,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['sort_indices'][s:e]])
+                gathered_indices.extend(f['sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['xline_sorted'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -1633,9 +1653,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['xline_sort_indices'][s:e]])
+                gathered_indices.extend(f['xline_sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['inline_sorted_by_xline'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -1655,9 +1677,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['cdp_sort_indices'][s:e]])
+                gathered_indices.extend(f['cdp_sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['offset_sorted'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -1677,9 +1701,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['ffid_sort_indices'][s:e]])
+                gathered_indices.extend(f['ffid_sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['offset_sorted_ffid'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -1699,9 +1725,11 @@ class SGYHandler:
             selected_keys = unique_keys[kidx:min(kidx + num_gathers, len(unique_keys))]
             gathered_data = []
             gathered_labels = []
+            gathered_indices = []
             for k in selected_keys:
                 s, e = ranges[k]
                 gathered_data.append(data[f['ffid_chan_sort_indices'][s:e]])
+                gathered_indices.extend(f['ffid_chan_sort_indices'][s:e].tolist())
                 gathered_labels.extend(f['chan_sorted'][s:e].tolist())
             data = np.concatenate(gathered_data, axis=0)
             n_traces_total = data.shape[0]
@@ -1724,6 +1752,7 @@ class SGYHandler:
             'samples_original': num_samples,
             'sample_rate': self._effective_sample_rate(f, True),
             'start_time_ms': self._effective_start_time(f, True),
+            'trace_indices': trace_indices.tolist(),
             'sort_mode': sort_mode,
         }
 

@@ -6,9 +6,10 @@ from typing import Optional, Any, Dict, List
 import os
 import uuid
 import tempfile
+import json
 
 from sgy_handler import sgy_handler, CancelledError
-from database import list_files as db_list_files
+from database import list_files as db_list_files, save_fbpick, list_fbpicks, get_fbpick, delete_fbpick
 
 app = FastAPI(title="SeisViz API", version="1.0.0")
 
@@ -480,6 +481,89 @@ async def delete_file(file_id: str):
         raise HTTPException(status_code=404, detail="File not found")
     
     return DeleteResponse(status="deleted")
+
+
+def _parse_fbpick_csv(content: bytes) -> List[Dict[str, Any]]:
+    text = content.decode('utf-8-sig', errors='replace')
+    picks = []
+    for line in text.splitlines():
+        line = line.strip()
+        if not line:
+            continue
+        parts = line.replace(',', ' ').split()
+        if len(parts) < 3:
+            continue
+        try:
+            ffid = int(float(parts[0]))
+            chan = int(float(parts[1]))
+            time_ms = float(parts[-1])
+        except (ValueError, IndexError):
+            continue
+        picks.append({'ffid': ffid, 'chan': chan, 'time_ms': time_ms})
+    return picks
+
+
+@app.post("/api/fbpicks/upload")
+async def upload_fbpick(file: UploadFile = File(...)):
+    content = await file.read()
+    picks = _parse_fbpick_csv(content)
+    if not picks:
+        raise HTTPException(status_code=400, detail="No valid picks found in the CSV (expected: ffid, chan, time)")
+    fbpick_id = str(uuid.uuid4())
+    payload = json.dumps(picks, separators=(',', ':'))
+    save_fbpick(fbpick_id, file.filename or 'fbpicks.csv', len(picks), payload)
+    return JSONResponse(content={'id': fbpick_id, 'name': file.filename, 'pick_count': len(picks), 'status': 'uploaded'})
+
+
+@app.get("/api/fbpicks")
+async def get_fbpicks():
+    return JSONResponse(content=list_fbpicks())
+
+
+@app.delete("/api/fbpicks/{fbpick_id}")
+async def remove_fbpick(fbpick_id: str):
+    if not delete_fbpick(fbpick_id):
+        raise HTTPException(status_code=404, detail="Fbpick file not found")
+    return JSONResponse(content={'status': 'deleted'})
+
+
+class MatchFbpickRequest(BaseModel):
+    fbpick_id: str
+
+
+@app.post("/api/fbpicks/match/{file_id}")
+async def match_fbpick(file_id: str, req: MatchFbpickRequest):
+    f = sgy_handler.files.get(file_id)
+    if f is None:
+        raise HTTPException(status_code=404, detail="Seismic file not loaded")
+    record = get_fbpick(req.fbpick_id)
+    if record is None:
+        raise HTTPException(status_code=404, detail="Fbpick file not found")
+    picks = json.loads(record['payload'])
+    ffid_arr = f.get('ffid_arr')
+    chan_arr = f.get('chan_arr')
+    if ffid_arr is None or chan_arr is None or len(ffid_arr) != f['data'].shape[0]:
+        raise HTTPException(status_code=400, detail="Seismic file has no FFID/CHAN headers to match")
+    index = {}
+    for i in range(len(ffid_arr)):
+        key = (int(ffid_arr[i]), int(chan_arr[i]))
+        if key not in index:
+            index[key] = i
+    matched = {}
+    count = 0
+    for p in picks:
+        key = (int(p['ffid']), int(p['chan']))
+        if key in index:
+            matched[str(index[key])] = float(p['time_ms'])
+            count += 1
+    return JSONResponse(content={
+        'fbpick_id': req.fbpick_id,
+        'name': record['name'],
+        'total_picks': len(picks),
+        'matched_picks': count,
+        'picks_by_trace': matched,
+    })
+
 
 # Wave CMP extension: additive routes; original API remains available.
 from database import DB_PATH as _cmp_db_path

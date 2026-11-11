@@ -8,7 +8,7 @@ Wave is a lightweight, local-first seismic processing workbench for SEG-Y gather
 
 Everything runs on your machine — the FastAPI backend stores datasets and velocity files in a local SQLite database, the React/Plotly frontend provides heatmap/wiggle visualization, sort views and inline analysis (spectrum, FX, autocorrelation, signal/noise), and a standalone `sgy_cutter.html` file allows cutting SEG-Y volumes without starting the app at all.
 
-Wave is an independent implementation and does not claim bit-for-bit compatibility with any commercial seismic package. Vendor-derived algorithms included here (LFAFN, SUPPRES, AMPSCAL) are manual-based independent implementations, included with their respective licenses.
+Wave is an independent implementation and does not claim bit-for-bit compatibility with any commercial seismic package.
 
 ## Quick start (Windows)
 
